@@ -1,6 +1,6 @@
 # Odoo MCP Server (Enhanced for AI Agents)
 
-![Odoo MCP Server Banner](./docs/odoo_mcp_banner.png) <!-- Replace with a real banner image -->
+![Odoo MCP Server Banner](https://i.imgur.com/your-banner-image.png) <!-- Replace with a real banner image -->
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
@@ -45,7 +45,7 @@ The Odoo MCP Server acts as a secure intermediary:
 5.  **Odoo Instance:** The MCP server executes the command on your Odoo instance.
 6.  **Response:** The result is passed back through the chain to the AI agent, which then formulates a natural language response for the user.
 
-![Architecture Diagram](./docs/odoo_mcp_architecture.png) <!-- Replace with a real architecture diagram -->
+![Architecture Diagram](https://i.imgur.com/your-architecture-diagram.png) <!-- Replace with a real architecture diagram -->
 
 ---
 
