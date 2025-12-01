@@ -207,6 +207,82 @@ async def list_tools() -> List[Tool]:
                 "required": ["model"],
             },
         ),
+        Tool(
+            name="execute_kw",
+            description=(
+                "Call any Odoo model method via execute_kw with optional positional "
+                "and keyword arguments, including context."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "model": {
+                        "type": "string",
+                        "description": "Odoo model name",
+                    },
+                    "method": {
+                        "type": "string",
+                        "description": "Method name to invoke (e.g., 'name_search', 'fields_view_get')",
+                    },
+                    "args": {
+                        "type": "array",
+                        "description": "Positional arguments to pass",
+                        "items": {},
+                        "default": [],
+                    },
+                    "kwargs": {
+                        "type": "object",
+                        "description": "Keyword arguments to pass",
+                        "default": {},
+                    },
+                    "context": {
+                        "type": "object",
+                        "description": "Optional context dict (lang, tz, etc.)",
+                        "default": None,
+                    },
+                },
+                "required": ["model", "method"],
+            },
+        ),
+        Tool(
+            name="get_server_info",
+            description="Fetch Odoo server version and about information for capability discovery",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="list_databases",
+            description="List databases exposed by the Odoo instance (requires admin rights)",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="render_report",
+            description="Render a report using the XML-RPC report endpoint",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "report_name": {
+                        "type": "string",
+                        "description": "Technical report name (e.g., 'sale.report_saleorder')",
+                    },
+                    "docids": {
+                        "type": ["array", "integer"],
+                        "description": "Record IDs to render",
+                        "items": {"type": "integer"},
+                    },
+                    "context": {
+                        "type": "object",
+                        "description": "Optional context dict",
+                        "default": None,
+                    },
+                    "data": {
+                        "type": "object",
+                        "description": "Optional data payload for the report",
+                        "default": None,
+                    },
+                },
+                "required": ["report_name", "docids"],
+            },
+        ),
     ]
 
 
@@ -299,7 +375,54 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 type="text",
                 text=json.dumps(fields, indent=2, default=str)
             )]
-            
+
+        elif name == "execute_kw":
+            result = await asyncio.to_thread(
+                client.execute_kw,
+                model=arguments["model"],
+                method=arguments["method"],
+                args=arguments.get("args", []),
+                kwargs=arguments.get("kwargs", {}),
+                context=arguments.get("context"),
+            )
+            return [TextContent(
+                type="text",
+                text=json.dumps(result, indent=2, default=str)
+            )]
+
+        elif name == "get_server_info":
+            version = await asyncio.to_thread(client.get_version_info)
+            about = None
+            try:
+                about = await asyncio.to_thread(client.get_about_info)
+            except Exception:
+                about = "About endpoint not available"
+
+            return [TextContent(
+                type="text",
+                text=json.dumps({"version": version, "about": about}, indent=2, default=str)
+            )]
+
+        elif name == "list_databases":
+            databases = await asyncio.to_thread(client.list_databases)
+            return [TextContent(
+                type="text",
+                text=json.dumps(databases, indent=2, default=str)
+            )]
+
+        elif name == "render_report":
+            report = await asyncio.to_thread(
+                client.render_report,
+                report_name=arguments["report_name"],
+                docids=arguments["docids"],
+                context=arguments.get("context"),
+                data=arguments.get("data"),
+            )
+            return [TextContent(
+                type="text",
+                text=json.dumps(report, indent=2, default=str)
+            )]
+
         else:
             return [TextContent(
                 type="text",

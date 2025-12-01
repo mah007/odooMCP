@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![Odoo Version](https://img.shields.io/badge/Odoo-10.0%20to%2018.0-blueviolet)](https://www.odoo.com/)
+[![Odoo Version](https://img.shields.io/badge/Odoo-10.0%20to%2019.0-blueviolet)](https://www.odoo.com/)
 
 ---
 
@@ -22,7 +22,18 @@ This server exposes a secure, JSON-RPC 2.0 compliant API that translates simple,
 - **Robust:** Includes comprehensive error handling to provide clear feedback to the AI agent.
 - **High-Performance:** Built on FastAPI for asynchronous, high-throughput performance.
 - **Easy to Deploy:** Comes with a simple, Docker-based deployment process.
-- **Broad Odoo Compatibility:** Designed to be a general-purpose solution for Odoo versions 10.0 through 18.0.
+- **Broad Odoo Compatibility:** Designed to be a general-purpose solution for Odoo versions 10.0 through 19.0.
+
+### MCP tool surface
+
+The MCP server currently exposes the following tools over XML-RPC:
+
+- `search_records`, `get_record`, `create_record`, `update_record`, `delete_record` — CRUD helpers that wrap `search_read`, `read`, `create`, `write`, and `unlink`.
+- `get_model_fields` and `list_models` — schema discovery helpers via `fields_get` and `ir.model`.
+- `execute_kw` — a generic passthrough to any model method with positional/keyword arguments and optional `context`.
+- `get_server_info` — fetches `common.version()` and `common.about()` for capability discovery.
+- `list_databases` — lists databases exposed by the `/xmlrpc/2/db` endpoint (requires sufficient privileges).
+- `render_report` — calls the `/xmlrpc/2/report` endpoint to render reports by technical name and document IDs.
 
 ---
 
@@ -55,7 +66,7 @@ The Odoo MCP Server acts as a secure intermediary:
 
 - A server running a Linux distribution (e.g., Ubuntu 22.04)
 - Docker and Docker Compose installed
-- A running Odoo instance (version 10.0 to 18.0)
+- A running Odoo instance (version 10.0 to 19.0)
 
 ### Step 1: Clone the Repository
 

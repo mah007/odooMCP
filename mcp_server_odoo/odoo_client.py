@@ -54,6 +54,18 @@ class OdooClient:
             allow_none=True,
             use_builtin_types=True,
         )
+        self.db = xmlrpc.client.ServerProxy(
+            urljoin(self.url, "/xmlrpc/2/db"),
+            context=ssl_context,
+            allow_none=True,
+            use_builtin_types=True,
+        )
+        self.report = xmlrpc.client.ServerProxy(
+            urljoin(self.url, "/xmlrpc/2/report"),
+            context=ssl_context,
+            allow_none=True,
+            use_builtin_types=True,
+        )
 
     def authenticate(self) -> int:
         """Authenticate with Odoo and return user ID."""
@@ -73,10 +85,14 @@ class OdooClient:
         model: str,
         method: str,
         *args: Any,
-        **kwargs: Any
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> Any:
         """Execute a method on an Odoo model."""
         uid = self.authenticate()
+        if context is not None:
+            kwargs.setdefault("context", context)
+
         return self.models.execute_kw(
             self.database,
             uid,
@@ -84,8 +100,21 @@ class OdooClient:
             model,
             method,
             args,
-            kwargs
+            kwargs,
         )
+
+    def execute_kw(
+        self,
+        model: str,
+        method: str,
+        args: Optional[List[Any]] = None,
+        kwargs: Optional[Dict[str, Any]] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """Direct passthrough to ``execute_kw`` for arbitrary model methods."""
+        args = args or []
+        kwargs = kwargs or {}
+        return self.execute(model, method, *args, context=context, **kwargs)
 
     def search(
         self,
@@ -94,6 +123,7 @@ class OdooClient:
         offset: int = 0,
         limit: Optional[int] = None,
         order: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> List[int]:
         """Search for record IDs matching the domain."""
         domain = domain or []
@@ -102,7 +132,10 @@ class OdooClient:
             kwargs["limit"] = limit
         if order is not None:
             kwargs["order"] = order
-        
+
+        if context is not None:
+            kwargs["context"] = context
+
         return self.execute(model, "search", domain, **kwargs)
 
     def search_read(
@@ -113,6 +146,7 @@ class OdooClient:
         offset: int = 0,
         limit: Optional[int] = None,
         order: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """Search and read records in a single call."""
         domain = domain or []
@@ -123,7 +157,10 @@ class OdooClient:
             kwargs["limit"] = limit
         if order is not None:
             kwargs["order"] = order
-        
+
+        if context is not None:
+            kwargs["context"] = context
+
         return self.execute(model, "search_read", domain, **kwargs)
 
     def read(
@@ -131,15 +168,18 @@ class OdooClient:
         model: str,
         ids: Union[int, List[int]],
         fields: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Read records by IDs."""
         if isinstance(ids, int):
             ids = [ids]
-            
+
         kwargs: Dict[str, Any] = {}
         if fields is not None:
             kwargs["fields"] = fields
-            
+        if context is not None:
+            kwargs["context"] = context
+
         result = self.execute(model, "read", ids, **kwargs)
         return result[0] if len(ids) == 1 else result
 
@@ -147,13 +187,18 @@ class OdooClient:
         self,
         model: str,
         values: Union[Dict[str, Any], List[Dict[str, Any]]],
+        context: Optional[Dict[str, Any]] = None,
     ) -> Union[int, List[int]]:
         """Create one or more records."""
         single_record = isinstance(values, dict)
         if single_record:
             values = [values]
-        
-        result = self.execute(model, "create", values)
+
+        kwargs: Dict[str, Any] = {}
+        if context is not None:
+            kwargs["context"] = context
+
+        result = self.execute(model, "create", values, **kwargs)
         return result[0] if single_record else result
 
     def write(
@@ -161,29 +206,40 @@ class OdooClient:
         model: str,
         ids: Union[int, List[int]],
         values: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Update records."""
         if isinstance(ids, int):
             ids = [ids]
-        
-        return self.execute(model, "write", ids, values)
+
+        kwargs: Dict[str, Any] = {}
+        if context is not None:
+            kwargs["context"] = context
+
+        return self.execute(model, "write", ids, values, **kwargs)
 
     def unlink(
         self,
         model: str,
         ids: Union[int, List[int]],
+        context: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Delete records."""
         if isinstance(ids, int):
             ids = [ids]
-        
-        return self.execute(model, "unlink", ids)
+
+        kwargs: Dict[str, Any] = {}
+        if context is not None:
+            kwargs["context"] = context
+
+        return self.execute(model, "unlink", ids, **kwargs)
 
     def fields_get(
         self,
         model: str,
         fields: Optional[List[str]] = None,
         attributes: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Dict[str, Any]]:
         """Get field definitions for a model."""
         kwargs: Dict[str, Any] = {}
@@ -191,9 +247,41 @@ class OdooClient:
             kwargs["allfields"] = fields
         if attributes is not None:
             kwargs["attributes"] = attributes
-            
+        if context is not None:
+            kwargs["context"] = context
+
         return self.execute(model, "fields_get", **kwargs)
 
     def get_model_list(self) -> List[Dict[str, Any]]:
         """Get list of all available models."""
         return self.search_read("ir.model", [], ["model", "name", "transient"])
+
+    def get_version_info(self) -> Dict[str, Any]:
+        """Return server version metadata."""
+        return self.common.version()
+
+    def get_about_info(self) -> Dict[str, Any]:
+        """Return server about information when available."""
+        return self.common.about()
+
+    def list_databases(self) -> List[str]:
+        """List databases on the Odoo instance."""
+        return self.db.list()
+
+    def render_report(
+        self,
+        report_name: str,
+        docids: Union[int, List[int]],
+        context: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """Render a report using the report endpoint."""
+        uid = self.authenticate()
+        docids = [docids] if isinstance(docids, int) else docids
+        kwargs: Dict[str, Any] = {}
+        if context is not None:
+            kwargs["context"] = context
+        if data is not None:
+            kwargs["data"] = data
+
+        return self.report.render_report(self.database, uid, self.password, report_name, docids, kwargs)
