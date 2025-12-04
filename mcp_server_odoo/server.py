@@ -35,6 +35,8 @@ def get_odoo_client() -> OdooClient:
                 password=os.environ.get("ODOO_PASSWORD"),
                 api_key=os.environ.get("ODOO_API_KEY"),
                 timeout=int(os.environ.get("ODOO_TIMEOUT", "120")),
+                verify_ssl=os.environ.get("ODOO_VERIFY_SSL", "true").lower()
+                in {"1", "true", "yes", "on"},
             )
             odoo_client = OdooClient(config)
         except (KeyError, ValidationError) as e:

@@ -91,6 +91,9 @@ ODOO_URL=https://your-odoo-instance.com
 ODOO_DB=your_database_name
 ODOO_USERNAME=your_odoo_user
 ODOO_API_KEY=your_odoo_api_key_or_password
+# TLS/SSL controls (set to "false" only for development against self-signed endpoints)
+ODOO_VERIFY_SSL=true
+ODOO_TIMEOUT=120
 
 # MCP Server Configuration
 MCP_HOST=0.0.0.0

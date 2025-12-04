@@ -1,7 +1,7 @@
 """Odoo XML-RPC client for API communication."""
 
-import xmlrpc.client
 import ssl
+import xmlrpc.client
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urljoin
 
@@ -17,6 +17,9 @@ class OdooConfig(BaseModel):
     password: Optional[str] = Field(None, description="Odoo password")
     api_key: Optional[str] = Field(None, description="Odoo API key")
     timeout: int = Field(120, description="Request timeout in seconds")
+    verify_ssl: bool = Field(
+        True, description="Whether to verify SSL certificates (disable for dev only)"
+    )
 
     def model_post_init(self, __context: Any) -> None:
         """Validate that either password or api_key is provided."""
@@ -36,33 +39,35 @@ class OdooClient:
         self.password = config.api_key or config.password
         self.uid: Optional[int] = None
         
-        # Create SSL context that doesn't verify certificates (for development)
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
+        if config.verify_ssl:
+            ssl_context = ssl.create_default_context()
+        else:
+            ssl_context = ssl._create_unverified_context()
+
+        self.transport = _TimeoutSafeTransport(timeout=config.timeout, context=ssl_context)
         
         # Initialize XML-RPC endpoints with SSL context
         self.common = xmlrpc.client.ServerProxy(
             urljoin(self.url, "/xmlrpc/2/common"),
-            context=ssl_context,
+            transport=self.transport,
             allow_none=True,
             use_builtin_types=True,
         )
         self.models = xmlrpc.client.ServerProxy(
             urljoin(self.url, "/xmlrpc/2/object"),
-            context=ssl_context,
+            transport=self.transport,
             allow_none=True,
             use_builtin_types=True,
         )
         self.db = xmlrpc.client.ServerProxy(
             urljoin(self.url, "/xmlrpc/2/db"),
-            context=ssl_context,
+            transport=self.transport,
             allow_none=True,
             use_builtin_types=True,
         )
         self.report = xmlrpc.client.ServerProxy(
             urljoin(self.url, "/xmlrpc/2/report"),
-            context=ssl_context,
+            transport=self.transport,
             allow_none=True,
             use_builtin_types=True,
         )
@@ -262,7 +267,11 @@ class OdooClient:
 
     def get_about_info(self) -> Dict[str, Any]:
         """Return server about information when available."""
-        return self.common.about()
+        about_method = getattr(self.common, "about", None)
+        if about_method is None:
+            raise AttributeError("common.about not available on this server version")
+
+        return about_method()
 
     def list_databases(self) -> List[str]:
         """List databases on the Odoo instance."""
@@ -285,3 +294,16 @@ class OdooClient:
             kwargs["data"] = data
 
         return self.report.render_report(self.database, uid, self.password, report_name, docids, kwargs)
+
+
+class _TimeoutSafeTransport(xmlrpc.client.SafeTransport):
+    """SafeTransport that applies a per-connection timeout."""
+
+    def __init__(self, *, timeout: int, context: ssl.SSLContext) -> None:
+        super().__init__(context=context)
+        self.timeout = timeout
+
+    def make_connection(self, host: str):  # type: ignore[override]
+        connection = super().make_connection(host)
+        connection.timeout = self.timeout
+        return connection
