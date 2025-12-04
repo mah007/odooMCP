@@ -1,5 +1,6 @@
 """Odoo service for API communication."""
 
+import json
 import xmlrpc.client
 import ssl
 from typing import Any, Dict, List, Optional, Union
@@ -41,6 +42,65 @@ class OdooService:
         )
         
         logger.info(f"Odoo service initialized for {self.url}/{self.database}")
+
+    @staticmethod
+    def _normalize_domain(domain: Optional[Any]) -> List[List[Any]]:
+        """Ensure the domain is a list of lists.
+
+        Accepts JSON-encoded strings for convenience and raises a clear
+        ValueError when the structure cannot be coerced.
+        """
+
+        if domain is None:
+            return []
+
+        if isinstance(domain, str):
+            try:
+                parsed = json.loads(domain)
+            except Exception as exc:  # pragma: no cover - defensive
+                raise ValueError(
+                    "Domain must be a list of domain predicates or a JSON-encoded list"
+                ) from exc
+            domain = parsed
+
+        if not isinstance(domain, list):
+            raise ValueError("Domain must be a list of domain predicates")
+
+        return domain
+
+    @staticmethod
+    def _normalize_fields(fields: Optional[Any]) -> Optional[List[str]]:
+        """Ensure fields is a list of strings.
+
+        Handles comma-separated or JSON-encoded strings and provides
+        clear feedback when the input cannot be normalized.
+        """
+
+        if fields is None:
+            return None
+
+        if isinstance(fields, str):
+            fields_str = fields.strip()
+            # Try JSON-encoded list first
+            if fields_str.startswith("["):
+                try:
+                    parsed = json.loads(fields_str)
+                except Exception as exc:  # pragma: no cover - defensive
+                    raise ValueError(
+                        "Fields must be a list of strings or a JSON-encoded list"
+                    ) from exc
+                fields = parsed
+            else:
+                # Treat as comma-separated string
+                fields = [item.strip() for item in fields_str.split(",") if item.strip()]
+
+        if not isinstance(fields, list):
+            raise ValueError("Fields must be a list of strings")
+
+        if not all(isinstance(field_name, str) for field_name in fields):
+            raise ValueError("Each field name must be a string")
+
+        return fields
 
     def authenticate(self) -> int:
         """Authenticate with Odoo and return user ID."""
@@ -105,7 +165,7 @@ class OdooService:
         order: Optional[str] = None,
     ) -> List[int]:
         """Search for record IDs matching the domain."""
-        domain = domain or []
+        domain = self._normalize_domain(domain)
         kwargs: Dict[str, Any] = {"offset": offset}
         if limit is not None:
             kwargs["limit"] = limit
@@ -139,7 +199,8 @@ class OdooService:
         order: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Search and read records in a single call."""
-        domain = domain or []
+        domain = self._normalize_domain(domain)
+        fields = self._normalize_fields(fields)
         kwargs: Dict[str, Any] = {"offset": offset}
         if fields is not None:
             kwargs["fields"] = fields
@@ -177,11 +238,12 @@ class OdooService:
             single_record = True
         else:
             single_record = False
-            
+
         kwargs: Dict[str, Any] = {}
-        if fields is not None:
-            kwargs["fields"] = fields
-        
+        normalized_fields = self._normalize_fields(fields)
+        if normalized_fields is not None:
+            kwargs["fields"] = normalized_fields
+
         # Generate cache key
         cache_key = self.cache.generate_key(
             "read", model, str(sorted(ids)), str(fields)

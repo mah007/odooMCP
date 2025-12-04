@@ -1,5 +1,6 @@
 """Odoo XML-RPC client for API communication."""
 
+import json
 import ssl
 import xmlrpc.client
 from typing import Any, Dict, List, Optional, Union
@@ -85,6 +86,51 @@ class OdooClient:
                 raise ValueError("Authentication failed. Check your credentials.")
         return self.uid
 
+    @staticmethod
+    def _normalize_domain(domain: Optional[Any]) -> List[List[Any]]:
+        """Ensure domains accept JSON strings or lists."""
+        if domain is None:
+            return []
+
+        if isinstance(domain, str):
+            try:
+                domain = json.loads(domain)
+            except Exception as exc:  # pragma: no cover - defensive
+                raise ValueError(
+                    "Domain must be a list of predicates or a JSON-encoded list"
+                ) from exc
+
+        if not isinstance(domain, list):
+            raise ValueError("Domain must be a list of predicates")
+
+        return domain
+
+    @staticmethod
+    def _normalize_fields(fields: Optional[Any]) -> Optional[List[str]]:
+        """Accept comma-separated or JSON-encoded field lists."""
+        if fields is None:
+            return None
+
+        if isinstance(fields, str):
+            fields_str = fields.strip()
+            if fields_str.startswith("["):
+                try:
+                    fields = json.loads(fields_str)
+                except Exception as exc:  # pragma: no cover - defensive
+                    raise ValueError(
+                        "Fields must be a list of strings or JSON-encoded list"
+                    ) from exc
+            else:
+                fields = [item.strip() for item in fields_str.split(",") if item.strip()]
+
+        if not isinstance(fields, list):
+            raise ValueError("Fields must be a list of strings")
+
+        if not all(isinstance(field_name, str) for field_name in fields):
+            raise ValueError("Each field name must be a string")
+
+        return fields
+
     def execute(
         self,
         model: str,
@@ -131,7 +177,7 @@ class OdooClient:
         context: Optional[Dict[str, Any]] = None,
     ) -> List[int]:
         """Search for record IDs matching the domain."""
-        domain = domain or []
+        domain = self._normalize_domain(domain)
         kwargs: Dict[str, Any] = {"offset": offset}
         if limit is not None:
             kwargs["limit"] = limit
@@ -154,7 +200,8 @@ class OdooClient:
         context: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """Search and read records in a single call."""
-        domain = domain or []
+        domain = self._normalize_domain(domain)
+        fields = self._normalize_fields(fields)
         kwargs: Dict[str, Any] = {"offset": offset}
         if fields is not None:
             kwargs["fields"] = fields
@@ -180,8 +227,9 @@ class OdooClient:
             ids = [ids]
 
         kwargs: Dict[str, Any] = {}
-        if fields is not None:
-            kwargs["fields"] = fields
+        normalized_fields = self._normalize_fields(fields)
+        if normalized_fields is not None:
+            kwargs["fields"] = normalized_fields
         if context is not None:
             kwargs["context"] = context
 

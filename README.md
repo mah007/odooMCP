@@ -140,6 +140,24 @@ You should see a message like: `Uvicorn running on http://0.0.0.0:8000`.
 
 ---
 
+## Postman collection for manual testing
+
+Use the Postman collection in `docs/odoo_mcp_postman_collection.json` to exercise the HTTP MCP endpoint without writing any code:
+
+1. Import the collection into Postman.
+2. Update the collection variables:
+   - `base_url` (default: `http://localhost:8000`)
+   - `mcp_api_key` (your MCP API key from `.env`)
+   - `default_model` (optional convenience value for sample calls)
+3. Run the requests to verify:
+   - Server liveness (`/` and `/health`)
+   - MCP protocol (`initialize`, `tools/list`, `logging/set_level`)
+   - Every exposed tool (`search_records`, `create_record`, `execute_method`, `model_info`, `cache_stats`, and more)
+
+Each request already includes JSON-RPC bodies with placeholders so you can quickly confirm connectivity and adjust payloads for your specific Odoo models.
+
+---
+
 ## Feedback and Contributions
 
 This project is made with ❤️ by **Mahmoud Abdel Latif** for the Odoo, n8n, and AI communities.

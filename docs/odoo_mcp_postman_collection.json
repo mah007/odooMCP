@@ -1,0 +1,376 @@
+{
+    "info": {
+        "_postman_id": "00000000-0000-0000-0000-000000000000",
+        "name": "Odoo MCP Server",
+        "description": "Comprehensive Postman collection to exercise the Odoo MCP HTTP server, covering JSON-RPC protocol calls, discovery endpoints, and every available tool exposed by the server layer.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8000",
+            "type": "string",
+            "description": "Root URL where the MCP HTTP server is listening."
+        },
+        {
+            "key": "mcp_api_key",
+            "value": "changeme",
+            "type": "string",
+            "description": "MCP server API key configured via MCP_API_KEY."
+        },
+        {
+            "key": "default_model",
+            "value": "res.partner",
+            "type": "string",
+            "description": "Default Odoo model used in sample tool calls."
+        }
+    ],
+    "auth": {
+        "type": "apikey",
+        "apikey": [
+            {
+                "key": "value",
+                "value": "{{mcp_api_key}}",
+                "type": "string"
+            },
+            {
+                "key": "key",
+                "value": "X-API-Key",
+                "type": "string"
+            }
+        ]
+    },
+    "item": [
+        {
+            "name": "Server Meta",
+            "item": [
+                {
+                    "name": "Root (GET)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "{{base_url}}/"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "{{base_url}}/health"
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "MCP Protocol",
+            "item": [
+                {
+                    "name": "Initialize",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"initialize\",\n  \"params\": {}\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List Tools",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/list\",\n  \"params\": {}\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Set Log Level",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"logging/set_level\",\n  \"params\": {\n    \"level\": \"info\"\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Notification Cancelled Ack",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"notifications/cancelled\",\n  \"params\": {}\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Tools - Discovery & Metadata",
+            "item": [
+                {
+                    "name": "List Models",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"list_models\",\n    \"arguments\": {\n      \"transient\": false,\n      \"search\": \"\"\n    }\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Model Fields",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_model_fields\",\n    \"arguments\": {\n      \"model\": \"{{default_model}}\",\n      \"fields\": [],\n      \"attributes\": []\n    }\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Model Info",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"model_info\",\n    \"arguments\": {\n      \"model\": \"{{default_model}}\"\n    }\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Server Status",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"server_status\",\n    \"arguments\": {}\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Cache Stats / Clear",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"cache_stats\",\n    \"arguments\": {\n      \"action\": \"stats\"\n    }\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Tools - Record Operations",
+            "item": [
+                {
+                    "name": "Search Records",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"search_records\",\n    \"arguments\": {\n      \"model\": \"{{default_model}}\",\n      \"domain\": [[\"name\", \"ilike\", \"Sample\"]],\n      \"fields\": [\"id\", \"name\"],\n      \"limit\": 5,\n      \"offset\": 0,\n      \"order\": \"name asc\"\n    }\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Search Count",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"search_count\",\n    \"arguments\": {\n      \"model\": \"{{default_model}}\",\n      \"domain\": [[\"active\", \"=\", true]]\n    }\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Record",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_record\",\n    \"arguments\": {\n      \"model\": \"{{default_model}}\",\n      \"ids\": [1],\n      \"fields\": [\"id\", \"name\", \"email\"]\n    }\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Create Record",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"create_record\",\n    \"arguments\": {\n      \"model\": \"{{default_model}}\",\n      \"values\": {\n        \"name\": \"Sample from Postman\",\n        \"email\": \"sample@example.com\"\n      }\n    }\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Record",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_record\",\n    \"arguments\": {\n      \"model\": \"{{default_model}}\",\n      \"ids\": [1],\n      \"values\": {\n        \"phone\": \"+123456789\"\n      }\n    }\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Delete Record",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"delete_record\",\n    \"arguments\": {\n      \"model\": \"{{default_model}}\",\n      \"ids\": [1]\n    }\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Tools - Execution",
+            "item": [
+                {
+                    "name": "Execute Method",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$guid}}\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"execute_method\",\n    \"arguments\": {\n      \"model\": \"{{default_model}}\",\n      \"method\": \"name_search\",\n      \"ids\": [],\n      \"args\": [[\"Sample\"]],\n      \"kwargs\": {\n        \"limit\": 5\n      }\n    }\n  }\n}"
+                        },
+                        "url": "{{base_url}}/mcp"
+                    },
+                    "response": []
+                }
+            ]
+        }
+    ]
+}
