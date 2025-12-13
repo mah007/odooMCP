@@ -323,6 +323,50 @@ async def get_all_tools() -> List[Dict[str, Any]]:
         ),
     ]
     
+    # Report tools
+    report_tools = [
+        Tool(
+            name="list_reports",
+            description="List available PDF reports (ir.actions.report report_type=qweb-pdf)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "model": {
+                        "type": "string",
+                        "description": "Filter by model (e.g., 'sale.order', 'account.move')",
+                    },
+                    "search": {
+                        "type": "string",
+                        "description": "Filter by report name/report_name (contains, case-insensitive)",
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="generate_report",
+            description="Generate a PDF report by technical name (e.g., sale.report_saleorder, account.report_invoice)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "report_name": {
+                        "type": "string",
+                        "description": "Report technical name (ir.actions.report.report_name)",
+                    },
+                    "ids": {
+                        "type": "array",
+                        "description": "Record IDs to render",
+                        "items": {"type": "integer"},
+                    },
+                    "data": {
+                        "type": "object",
+                        "description": "Optional data/context payload for the report",
+                    },
+                },
+                "required": ["report_name", "ids"],
+            },
+        ),
+    ]
+    
     # Server management tools
     server_tools = [
             Tool(
@@ -351,7 +395,7 @@ async def get_all_tools() -> List[Dict[str, Any]]:
     ]
     
     # Combine all tools and fix schemas
-    all_tools = record_tools + search_tools + model_tools + server_tools
+    all_tools = record_tools + search_tools + model_tools + report_tools + server_tools
     for tool in all_tools:
         tool_dict = tool.model_dump()
         tools.append(_fix_tool_schema(tool_dict))
@@ -364,6 +408,17 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     logger.info(f"Tool called: {name} with arguments: {arguments}")
     
     odoo_service = get_odoo_service()
+    start_time = time.monotonic()
+
+    def finish_success(data: Any, cache_meta: Optional[Dict[str, Any]] = None) -> List[TextContent]:
+        """Return success payload with duration metadata."""
+        duration_ms = round((time.monotonic() - start_time) * 1000, 2)
+        return _as_text_content(odoo_service.build_success(data, cache_meta=cache_meta, duration_ms=duration_ms))
+
+    def finish_error(exc: Exception) -> List[TextContent]:
+        """Return error payload with duration metadata."""
+        duration_ms = round((time.monotonic() - start_time) * 1000, 2)
+        return _as_text_content(odoo_service.build_error(exc, duration_ms=duration_ms))
 
     try:
         # Record management tools
@@ -372,8 +427,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             values = arguments["values"]
             logger.info(f"Creating record in {model}")
             result = odoo_service.create(model, values)
-            payload = odoo_service.build_success({"id": result, "message": f"Created record with ID: {result}"})
-            return _as_text_content(payload)
+            return finish_success({"id": result, "message": f"Created record with ID: {result}"})
         
         elif name == "update_record":
             model = arguments["model"]
@@ -381,16 +435,14 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             values = arguments["values"]
             logger.info(f"Updating {len(ids)} record(s) in {model}")
             success = odoo_service.write(model, ids, values)
-            payload = odoo_service.build_success({"success": success, "ids": ids, "message": f"Update {'successful' if success else 'failed'} for IDs: {ids}"})
-            return _as_text_content(payload)
+            return finish_success({"success": success, "ids": ids, "message": f"Update {'successful' if success else 'failed'} for IDs: {ids}"})
         
         elif name == "delete_record":
             model = arguments["model"]
             ids = arguments["ids"]
             logger.info(f"Deleting {len(ids)} record(s) from {model}")
             success = odoo_service.unlink(model, ids)
-            payload = odoo_service.build_success({"success": success, "ids": ids, "message": f"Delete {'successful' if success else 'failed'} for IDs: {ids}"})
-            return _as_text_content(payload)
+            return finish_success({"success": success, "ids": ids, "message": f"Delete {'successful' if success else 'failed'} for IDs: {ids}"})
         
         elif name == "get_record":
             model = arguments["model"]
@@ -399,8 +451,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             logger.info(f"Getting {len(ids)} record(s) from {model}")
             result = odoo_service.read(model, ids, fields)
             records = result if isinstance(result, list) else [result]
-            payload = odoo_service.build_success({"records": result, "count": len(records)})
-            return _as_text_content(payload)
+            return finish_success({"records": result, "count": len(records)})
         
         elif name == "execute_method":
             model = arguments["model"]
@@ -411,14 +462,31 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             logger.info(f"Executing method '{method}' on {model} with IDs: {ids}")
             
             odoo_service._validate_model(model)
+            # Pre-flight validation for common aggregate calls
+            if method == "read_group" and args:
+                domain = args[0] if len(args) > 0 else []
+                fields = args[1] if len(args) > 1 else []
+                groupby = args[2] if len(args) > 2 else []
+                domain = odoo_service._validate_domain(domain)
+                if fields:
+                    odoo_service._validate_fields(model, fields)
+                if groupby:
+                    odoo_service._validate_fields(model, groupby)
+                domain_fields = {
+                    clause[0] for clause in domain
+                    if isinstance(clause, (list, tuple)) and clause and isinstance(clause[0], str)
+                }
+                if domain_fields:
+                    odoo_service._validate_fields(model, list(domain_fields))
+                if len(args) > 0:
+                    args[0] = domain
             # Prepare arguments - if ids are provided, add them to args
             if ids:
                 args = [ids] + list(args)
             
             # Execute the method
             result = odoo_service.execute(model, method, *args, **kwargs)
-            payload = odoo_service.build_success({"result": result})
-            return _as_text_content(payload)
+            return finish_success({"result": result})
         
         # Search tools
         elif name == "search_records":
@@ -438,8 +506,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 limit=limit,
                 order=order,
             )
-            payload = odoo_service.build_success({"records": result, "count": len(result)})
-            return _as_text_content(payload)
+            return finish_success({"records": result, "count": len(result)})
         
         elif name == "search_count":
             model = arguments["model"]
@@ -447,8 +514,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             logger.info(f"Counting records in {model} with domain: {domain}")
             ids = odoo_service.search(model=model, domain=domain)
             count = len(ids)
-            payload = odoo_service.build_success({"count": count, "message": f"Found {count} records matching the criteria"})
-            return _as_text_content(payload)
+            return finish_success({"count": count, "message": f"Found {count} records matching the criteria"})
         
         # Model tools
         elif name == "list_models":
@@ -471,8 +537,10 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             # Format output
             if not filtered_models:
-                payload = odoo_service.build_success({"models": [], "count": 0, "message": "No models found matching the criteria."}, {"model_list": cache_status})
-                return _as_text_content(payload)
+                return finish_success(
+                    {"models": [], "count": 0, "message": "No models found matching the criteria."},
+                    {"model_list": cache_status},
+                )
             
             output = f"Found {len(filtered_models)} Odoo models:\n\n"
             for model in sorted(filtered_models, key=lambda x: x["model"]):
@@ -480,11 +548,10 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 output += f"• **{model['model']}**{transient_marker}\n"
                 output += f"  {model['name']}\n\n"
             
-            payload = odoo_service.build_success(
+            return finish_success(
                 {"models": filtered_models, "count": len(filtered_models), "formatted_output": output},
                 {"model_list": cache_status},
             )
-            return _as_text_content(payload)
         
         elif name == "get_model_fields":
             model = arguments["model"]
@@ -500,8 +567,10 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             )
             
             if not field_info:
-                payload = odoo_service.build_success({"fields": {}, "count": 0, "message": f"No fields found for model: {model}"}, {"fields_get": cache_status})
-                return _as_text_content(payload)
+                return finish_success(
+                    {"fields": {}, "count": 0, "message": f"No fields found for model: {model}"},
+                    {"fields_get": cache_status},
+                )
             
             # Format output for better readability
             output = f"Fields for model **{model}**:\n\n"
@@ -520,11 +589,10 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 
                 output += "\n"
             
-            payload = odoo_service.build_success(
+            return finish_success(
                 {"fields": field_info, "count": len(field_info), "formatted_output": output},
                 {"fields_get": cache_status},
             )
-            return _as_text_content(payload)
         
         elif name == "model_info":
             model = arguments["model"]
@@ -579,14 +647,43 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             output += f"Use `get_model_fields` with model='{model}' to see all field details."
             
             cache_meta = {"model_list": model_cache_status, "fields_get": fields_cache_status}
-            payload = odoo_service.build_success({
-                "model_info": model_info,
-                "field_count": field_count,
-                "has_records": has_records,
-                "key_fields": key_fields[:10],
-                "formatted_output": output
-            }, cache_meta)
-            return _as_text_content(payload)
+            return finish_success(
+                {
+                    "model_info": model_info,
+                    "field_count": field_count,
+                    "has_records": has_records,
+                    "key_fields": key_fields[:10],
+                    "formatted_output": output,
+                },
+                cache_meta,
+            )
+        
+        # Report tools
+        elif name == "list_reports":
+            model = arguments.get("model")
+            search_term = arguments.get("search")
+            logger.info(f"Listing reports (model={model}, search={search_term})")
+            reports = odoo_service.list_reports(model=model, search=search_term)
+            return finish_success({"reports": reports, "count": len(reports)})
+
+        elif name == "generate_report":
+            report_name = arguments["report_name"]
+            ids = arguments["ids"]
+            data = arguments.get("data")
+            logger.info(f"Generating report {report_name} for IDs: {ids}")
+            result = odoo_service.render_report(report_name=report_name, ids=ids, data=data)
+            # Include size metadata in meta cache key style
+            return finish_success(
+                {
+                    "report_name": result["report_name"],
+                    "report_label": result["report_label"],
+                    "model": result["model"],
+                    "ids": result["ids"],
+                    "pdf_base64": result["pdf_base64"],
+                    "size_bytes": result["size_bytes"],
+                },
+                cache_meta={"report_type": "qweb-pdf"},
+            )
         
         # Server management tools
         elif name == "server_status":
@@ -604,7 +701,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 
     except Exception as e:
         logger.error(f"Error handling tool {name}: {e}", exc_info=True)
-        return _as_text_content(odoo_service.build_error(e))
+        return finish_error(e)
 
     
 async def handle_server_status(arguments: Dict[str, Any]) -> List[TextContent]:

@@ -22,6 +22,7 @@ class OdooConfig(BaseModel):
     api_key: Optional[str] = Field(None, description="Odoo API key")
     timeout: int = Field(120, description="Request timeout in seconds")
     version: str = Field("18.0", description="Odoo version (e.g. '18.0' or '19.0')")
+    endpoint_mode: str = Field("xmlrpc2", description="RPC endpoint mode: 'xmlrpc2' or legacy 'xmlrpc'")
 
     @field_validator("url")
     @classmethod
@@ -48,6 +49,15 @@ class OdooConfig(BaseModel):
             raise ValueError("Version must be one of: 18.0, 19.0")
         return normalized
 
+    @field_validator("endpoint_mode")
+    @classmethod
+    def validate_endpoint_mode(cls, v: str) -> str:
+        """Ensure the endpoint mode is valid."""
+        normalized = v.strip().lower()
+        if normalized not in {"xmlrpc2", "xmlrpc"}:
+            raise ValueError("Endpoint mode must be one of: xmlrpc2, xmlrpc")
+        return normalized
+
     def model_post_init(self, __context: Any) -> None:
         """Validate that either password or api_key is provided."""
         if not self.password and not self.api_key:
@@ -55,19 +65,21 @@ class OdooConfig(BaseModel):
 
     def get_endpoints(self) -> Dict[str, str]:
         """Return XML-RPC endpoints derived from the configured version."""
-        common_path = "/xmlrpc/2/common"
-        object_path = "/xmlrpc/2/object"
-        # The XML-RPC endpoints stay the same for 18.0 and 19.0; keeping the branch
-        # allows a future switch to JSON-RPC without touching callers.
-        if self.version == "19.0":
-            endpoint_mode = "xmlrpc2"
+        if self.endpoint_mode == "xmlrpc":
+            common_path = "/xmlrpc/common"
+            object_path = "/xmlrpc/object"
+            report_path = "/xmlrpc/report"
         else:
-            endpoint_mode = "xmlrpc2"
+            common_path = "/xmlrpc/2/common"
+            object_path = "/xmlrpc/2/object"
+            report_path = "/xmlrpc/2/report"
+        endpoint_mode = self.endpoint_mode
 
         base_url = f"{self.url}/"
         return {
             "common": f"{base_url.rstrip('/')}{common_path}",
             "object": f"{base_url.rstrip('/')}{object_path}",
+            "report": f"{base_url.rstrip('/')}{report_path}",
             "endpoint_mode": endpoint_mode,
         }
 
@@ -142,6 +154,7 @@ class Config(BaseModel):
             api_key=os.environ.get("ODOO_API_KEY"),
             timeout=int(os.environ.get("ODOO_TIMEOUT", "120")),
             version=os.environ.get("ODOO_VERSION", "18.0"),
+            endpoint_mode=os.environ.get("ODOO_ENDPOINT_MODE", "xmlrpc2"),
         )
         
         # Server configuration (optional with defaults)

@@ -105,6 +105,8 @@ cp config.example.yml config.yml
 
 Set `odoo.version` to `19.0` to target the `/xmlrpc/2/common` and `/xmlrpc/2/object` endpoints used by Odoo 19.0; use `18.0` to keep the current XML-RPC behaviour.
 
+If your Odoo only exposes the legacy `/xmlrpc/common` endpoints, set `odoo.endpoint_mode: xmlrpc` (or `ODOO_ENDPOINT_MODE=xmlrpc` in env vars).
+
 ### Step 3: Build and Run the Server
 
 ```bash

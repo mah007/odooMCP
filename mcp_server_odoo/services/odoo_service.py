@@ -1,8 +1,11 @@
 """Odoo service for API communication."""
 
+import base64
 import ssl
+import time
 import xmlrpc.client
 from typing import Any, Dict, List, Optional, Union
+import httpx
 
 from ..config import OdooConfig, get_config
 from ..logger import get_logger
@@ -37,6 +40,7 @@ class OdooService:
         self.endpoint_mode = endpoints["endpoint_mode"]
         self.common_endpoint = endpoints["common"]
         self.object_endpoint = endpoints["object"]
+        self.report_endpoint = endpoints.get("report")
         
         # Create SSL context that doesn't verify certificates (for development)
         ssl_context = ssl.create_default_context()
@@ -46,6 +50,13 @@ class OdooService:
         # Initialize XML-RPC clients with SSL context
         self.common = xmlrpc.client.ServerProxy(
             self.common_endpoint,
+            context=ssl_context,
+            allow_none=True,
+            use_builtin_types=True,
+        )
+        # Report endpoint (XML-RPC)
+        self.report = xmlrpc.client.ServerProxy(
+            self.report_endpoint,
             context=ssl_context,
             allow_none=True,
             use_builtin_types=True,
@@ -62,7 +73,12 @@ class OdooService:
             f"(version={self.config.version}, endpoint_mode={self.endpoint_mode})"
         )
 
-    def _build_meta(self, cache_meta: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    def _build_meta(
+        self,
+        cache_meta: Optional[Dict[str, str]] = None,
+        extra_meta: Optional[Dict[str, Any]] = None,
+        duration_ms: Optional[float] = None,
+    ) -> Dict[str, Any]:
         """Build metadata describing the Odoo connection and cache usage."""
         meta: Dict[str, Any] = {
             "odoo_version": self.config.version,
@@ -70,6 +86,10 @@ class OdooService:
         }
         if cache_meta:
             meta["cache"] = cache_meta
+        if duration_ms is not None:
+            meta["duration_ms"] = duration_ms
+        if extra_meta:
+            meta.update(extra_meta)
         return meta
 
     def _classify_exception(self, exc: Exception) -> OdooServiceError:
@@ -119,15 +139,25 @@ class OdooService:
             elif "domain" in lower_msg:
                 error_type = "invalid_domain"
                 retryable = True
-                hint = "Domain must be a list of [field, operator, value] triplets"
+            hint = "Domain must be a list of [field, operator, value] triplets"
 
         return OdooServiceError(error_type, message, hint, retryable)
 
-    def build_success(self, data: Any, cache_meta: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    def build_success(
+        self,
+        data: Any,
+        cache_meta: Optional[Dict[str, str]] = None,
+        extra_meta: Optional[Dict[str, Any]] = None,
+        duration_ms: Optional[float] = None,
+    ) -> Dict[str, Any]:
         """Build a structured success response."""
-        return {"ok": True, "data": data, "meta": self._build_meta(cache_meta)}
+        return {
+            "ok": True,
+            "data": data,
+            "meta": self._build_meta(cache_meta=cache_meta, extra_meta=extra_meta, duration_ms=duration_ms),
+        }
 
-    def build_error(self, exc: Exception) -> Dict[str, Any]:
+    def build_error(self, exc: Exception, duration_ms: Optional[float] = None) -> Dict[str, Any]:
         """Build a structured error response."""
         error = self._classify_exception(exc)
         return {
@@ -138,7 +168,7 @@ class OdooService:
                 "hint": error.hint,
                 "retryable": error.retryable,
             },
-            "meta": self._build_meta(),
+            "meta": self._build_meta(duration_ms=duration_ms),
         }
 
     def _validate_domain(self, domain: Optional[List[List[Any]]]) -> List[List[Any]]:
@@ -185,8 +215,14 @@ class OdooService:
         if not fields:
             return "skip"
 
+        def _normalize(field_name: str) -> str:
+            """Strip aggregation suffixes like ':sum' used in read_group."""
+            if isinstance(field_name, str) and ":" in field_name:
+                return field_name.split(":", 1)[0]
+            return field_name
+
         field_info, cache_status = self.fields_get(model, return_cache_status=True)
-        invalid_fields = [field for field in fields if field not in field_info]
+        invalid_fields = [field for field in fields if _normalize(field) not in field_info]
         if invalid_fields:
             raise OdooServiceError(
                 "invalid_field",
@@ -258,6 +294,23 @@ class OdooService:
             logger.error(f"Execution failed: {exc}")
             raise self._classify_exception(exc)
 
+    def _execute_with_retry(self, func, attempts: int = 3, backoff_base: float = 0.2) -> Any:
+        """Execute a callable with simple retry/backoff for retryable transport faults."""
+        for attempt in range(attempts):
+            try:
+                return func()
+            except Exception as exc:
+                error = self._classify_exception(exc)
+                is_last = attempt >= attempts - 1
+                if not error.retryable or is_last:
+                    raise error
+                sleep_for = backoff_base * (2 ** attempt)
+                logger.warning(
+                    f"Retryable error ({error.error_type}): {error}. "
+                    f"Retrying in {sleep_for:.2f}s (attempt {attempt + 1}/{attempts})"
+                )
+                time.sleep(sleep_for)
+
     def search(
         self,
         model: str,
@@ -291,7 +344,9 @@ class OdooService:
         if cached_result is not None:
             return cached_result
         
-        result = self.execute(model, "search", domain, **kwargs)
+        result = self._execute_with_retry(
+            lambda: self.execute(model, "search", domain, **kwargs)
+        )
         
         # Cache the result
         self.cache.set(cache_key, result)
@@ -336,7 +391,9 @@ class OdooService:
         if cached_result is not None:
             return cached_result
         
-        result = self.execute(model, "search_read", domain, **kwargs)
+        result = self._execute_with_retry(
+            lambda: self.execute(model, "search_read", domain, **kwargs)
+        )
         
         # Cache the result
         self.cache.set(cache_key, result)
@@ -471,7 +528,9 @@ class OdooService:
             cache_status = "hit"
             result = cached_result
         else:
-            result = self.execute(model, "fields_get", **kwargs)
+            result = self._execute_with_retry(
+                lambda: self.execute(model, "fields_get", **kwargs)
+            )
             # Cache for longer (1 hour) since fields don't change often
             self.cache.set(cache_key, result, ttl=3600)
         
@@ -523,7 +582,9 @@ class OdooService:
         if cached_result is not None:
             return cached_result
         
-        result = self.execute(model, "search_count", domain)
+        result = self._execute_with_retry(
+            lambda: self.execute(model, "search_count", domain)
+        )
         
         # Cache the result
         self.cache.set(cache_key, result)
@@ -580,6 +641,178 @@ class OdooService:
             "modules": model_info.get("modules", ""),
             "fields": fields,
             "field_count": len(fields),
+        }
+
+    def list_reports(self, model: Optional[str] = None, search: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List available QWeb PDF reports (ir.actions.report)."""
+        domain: List[List[Any]] = [["report_type", "=", "qweb-pdf"]]
+        if model:
+            domain.append(["model", "=", model])
+
+        reports = self.search_read(
+            "ir.actions.report",
+            domain,
+            ["id", "name", "report_name", "model", "report_type"],
+        )
+
+        if search:
+            term = search.lower()
+            reports = [
+                r
+                for r in reports
+                if term in (r.get("name") or "").lower()
+                or term in (r.get("report_name") or "").lower()
+            ]
+        return reports
+
+    def render_report(
+        self,
+        report_name: str,
+        ids: List[int],
+        data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Render a QWeb PDF report by technical name for given record IDs."""
+        if not report_name:
+            raise OdooServiceError(
+                "invalid_method",
+                "Report name is required",
+                "Provide a report technical name (e.g., sale.report_saleorder, account.report_invoice)",
+                True,
+            )
+        if not ids:
+            raise OdooServiceError(
+                "invalid_domain",
+                "No record IDs provided for report generation",
+                "Pass a non-empty list of record IDs to render",
+                True,
+            )
+
+        ids = [int(i) for i in ids]
+        reports = self.list_reports(search=report_name)
+        report_info = next((r for r in reports if r.get("report_name") == report_name), None)
+        if not report_info:
+            raise OdooServiceError(
+                "invalid_method",
+                f"Report '{report_name}' not found",
+                "Call list_reports to discover available report technical names",
+                True,
+            )
+
+        def _render_via_report_service():
+            return self.report.render_report(
+                self.database,
+                self.authenticate(),
+                self.password,
+                report_name,
+                ids,
+            )
+
+        def _render_via_model(method: str):
+            # legacy model methods on report.report (render_report/get_pdf)
+            args: List[Any] = [ids, report_name]
+            if data is not None:
+                args.append(data)
+            return self.execute("report.report", method, *args)
+        
+        def _render_via_http_report() -> bytes:
+            """Fallback using Odoo HTTP report route /report/pdf/REPORT/ids."""
+            base_url = self.url.rstrip("/")
+            login_url = f"{base_url}/web/session/authenticate"
+            report_url = f"{base_url}/report/pdf/{report_name}/{','.join(map(str, ids))}"
+            try:
+                with httpx.Client(verify=False, timeout=self.config.timeout) as client:
+                    auth_payload = {
+                        "jsonrpc": "2.0",
+                        "params": {
+                            "db": self.database,
+                            "login": self.username,
+                            "password": self.password,
+                        },
+                    }
+                    auth_resp = client.post(login_url, json=auth_payload)
+                    auth_resp.raise_for_status()
+                    auth_json = auth_resp.json()
+                    if not auth_json.get("result") or not auth_json["result"].get("session_id"):
+                        raise OdooServiceError(
+                            "auth_failed",
+                            f"Authentication failed for HTTP report: {auth_json}",
+                            "Verify Odoo credentials/API key",
+                            False,
+                        )
+                    session_id = auth_json["result"]["session_id"]
+                    pdf_resp = client.get(report_url, headers={"Cookie": f"session_id={session_id}"})
+                    pdf_resp.raise_for_status()
+                    return pdf_resp.content
+            except OdooServiceError:
+                raise
+            except Exception as exc:
+                raise OdooServiceError(
+                    "transport_error",
+                    f"HTTP report fetch failed: {exc}",
+                    "Check Odoo URL/network and ensure report endpoints are reachable",
+                    True,
+                )
+
+        try:
+            result = self._execute_with_retry(_render_via_report_service)
+        except OdooServiceError as exc:
+            # Fallback to model-based rendering if report service is unavailable
+            msg = str(exc).lower().replace("\\'", "'")
+            if "keyerror: 'report'" in msg or ("keyerror" in msg and "report" in msg) or "does not exist" in msg or "unknown" in msg:
+                try:
+                    result = self._execute_with_retry(lambda: _render_via_model("render_report"))
+                except OdooServiceError:
+                    try:
+                        result = self._execute_with_retry(lambda: _render_via_model("get_pdf"))
+                    except OdooServiceError:
+                        # Last resort: HTTP download of report
+                        pdf_bytes = _render_via_http_report()
+                        encoded = base64.b64encode(pdf_bytes).decode("ascii")
+                        return {
+                            "report_name": report_name,
+                            "report_label": report_info.get("name"),
+                            "model": report_info.get("model"),
+                            "ids": ids,
+                            "size_bytes": len(pdf_bytes),
+                            "pdf_base64": encoded,
+                        }
+            else:
+                raise exc
+        pdf_bytes: bytes
+        if isinstance(result, dict) and "result" in result:
+            raw = result["result"]
+            if isinstance(raw, str):
+                pdf_bytes = base64.b64decode(raw)
+            elif isinstance(raw, (bytes, bytearray)):
+                pdf_bytes = bytes(raw)
+            else:
+                pdf_bytes = bytes(raw)
+        elif isinstance(result, (list, tuple)) and result:
+            first = result[0]
+            if isinstance(first, str):
+                pdf_bytes = base64.b64decode(first)
+            elif isinstance(first, (bytes, bytearray)):
+                pdf_bytes = bytes(first)
+            else:
+                pdf_bytes = bytes(first)
+        elif isinstance(result, (bytes, bytearray)):
+            pdf_bytes = bytes(result)
+        else:
+            raise OdooServiceError(
+                "unknown",
+                f"Unexpected report response type: {type(result)}",
+                "Verify the report name and try again",
+                False,
+            )
+
+        encoded = base64.b64encode(pdf_bytes).decode("ascii")
+        return {
+            "report_name": report_name,
+            "report_label": report_info.get("name"),
+            "model": report_info.get("model"),
+            "ids": ids,
+            "size_bytes": len(pdf_bytes),
+            "pdf_base64": encoded,
         }
 
     def _invalidate_cache(self, model: str) -> None:

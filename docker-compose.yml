@@ -5,11 +5,15 @@ services:
     build: .
     ports:
       - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      - ODOO_URL=https://test.com
-      - ODOO_DB=mydataDB
-      - ODOO_USERNAME=me@test.com
-      - ODOO_API_KEY=MyPass@1234
+      - ODOO_URL=http://host.docker.internal:8069
+      - ODOO_DB=samayainv
+      - ODOO_USERNAME=admin
+      - ODOO_API_KEY=admin123
+      - ODOO_VERSION=18.0
+      - ODOO_ENDPOINT_MODE=xmlrpc2
       - MCP_API_KEY=a7f3c9e2b8d4f1a6c5e8d9b2a4d7c1e3b6d8a9f2c4e7b1d3a5f8c2e6f9d1a4d7
 
       - MCP_HOST=0.0.0.0
@@ -20,11 +24,19 @@ services:
       - CACHE_ENABLED=true
       - CACHE_TTL=300
       - CACHE_MAX_SIZE=1000
+      # Optional: use a YAML config instead of env vars
+      # - CONFIG_FILE=/app/config.yml
     volumes:
       - ./logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request, os; req = urllib.request.Request('http://localhost:8000/health', headers={'X-Api-Key': os.environ.get('MCP_API_KEY','')}); urllib.request.urlopen(req, timeout=5)",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
