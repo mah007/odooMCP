@@ -1,27 +1,10 @@
 """Odoo XML-RPC client for API communication."""
 
-import xmlrpc.client
 import ssl
+import xmlrpc.client
 from typing import Any, Dict, List, Optional, Union
-from urllib.parse import urljoin
 
-from pydantic import BaseModel, Field, ValidationError
-
-
-class OdooConfig(BaseModel):
-    """Configuration for Odoo connection."""
-
-    url: str = Field(..., description="Odoo instance URL")
-    database: str = Field(..., description="Odoo database name")
-    username: str = Field(..., description="Odoo username (e.g. email)")
-    password: Optional[str] = Field(None, description="Odoo password")
-    api_key: Optional[str] = Field(None, description="Odoo API key")
-    timeout: int = Field(120, description="Request timeout in seconds")
-
-    def model_post_init(self, __context: Any) -> None:
-        """Validate that either password or api_key is provided."""
-        if not self.password and not self.api_key:
-            raise ValueError("Either password or api_key must be provided")
+from .config import OdooConfig
 
 
 class OdooClient:
@@ -35,6 +18,8 @@ class OdooClient:
         self.username = config.username
         self.password = config.api_key or config.password
         self.uid: Optional[int] = None
+        endpoints = self.config.get_endpoints()
+        self.endpoint_mode = endpoints["endpoint_mode"]
         
         # Create SSL context that doesn't verify certificates (for development)
         ssl_context = ssl.create_default_context()
@@ -43,13 +28,13 @@ class OdooClient:
         
         # Initialize XML-RPC endpoints with SSL context
         self.common = xmlrpc.client.ServerProxy(
-            urljoin(self.url, "/xmlrpc/2/common"),
+            endpoints["common"],
             context=ssl_context,
             allow_none=True,
             use_builtin_types=True,
         )
         self.models = xmlrpc.client.ServerProxy(
-            urljoin(self.url, "/xmlrpc/2/object"),
+            endpoints["object"],
             context=ssl_context,
             allow_none=True,
             use_builtin_types=True,

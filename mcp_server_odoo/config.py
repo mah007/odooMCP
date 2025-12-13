@@ -1,9 +1,12 @@
 """Configuration management for Odoo MCP Server."""
 
 import os
-from typing import Optional
-from pydantic import BaseModel, Field, field_validator
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import yaml
 from dotenv import load_dotenv
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 # Load environment variables
 load_dotenv()
@@ -11,34 +14,62 @@ load_dotenv()
 
 class OdooConfig(BaseModel):
     """Configuration for Odoo connection."""
-    
+
     url: str = Field(..., description="Odoo instance URL")
-    database: str = Field(..., description="Odoo database name")
+    database: str = Field(..., description="Odoo database name", validation_alias=AliasChoices("database", "db"))
     username: str = Field(..., description="Odoo username (e.g. email)")
     password: Optional[str] = Field(None, description="Odoo password")
     api_key: Optional[str] = Field(None, description="Odoo API key")
     timeout: int = Field(120, description="Request timeout in seconds")
-    
-    @field_validator('url')
+    version: str = Field("18.0", description="Odoo version (e.g. '18.0' or '19.0')")
+
+    @field_validator("url")
     @classmethod
-    def validate_url(cls, v):
+    def validate_url(cls, v: str) -> str:
         """Validate and normalize URL."""
-        if not v.startswith(('http://', 'https://')):
-            raise ValueError('URL must start with http:// or https://')
-        return v.rstrip('/')
-    
-    @field_validator('timeout')
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return v.rstrip("/")
+
+    @field_validator("timeout")
     @classmethod
-    def validate_timeout(cls, v):
+    def validate_timeout(cls, v: int) -> int:
         """Validate timeout value."""
         if v <= 0:
-            raise ValueError('Timeout must be positive')
+            raise ValueError("Timeout must be positive")
         return v
-    
-    def model_post_init(self, __context) -> None:
+
+    @field_validator("version")
+    @classmethod
+    def validate_version(cls, v: str) -> str:
+        """Ensure the version is one of the supported options."""
+        normalized = v.strip()
+        if normalized not in {"18.0", "19.0"}:
+            raise ValueError("Version must be one of: 18.0, 19.0")
+        return normalized
+
+    def model_post_init(self, __context: Any) -> None:
         """Validate that either password or api_key is provided."""
         if not self.password and not self.api_key:
             raise ValueError("Either password or api_key must be provided")
+
+    def get_endpoints(self) -> Dict[str, str]:
+        """Return XML-RPC endpoints derived from the configured version."""
+        common_path = "/xmlrpc/2/common"
+        object_path = "/xmlrpc/2/object"
+        # The XML-RPC endpoints stay the same for 18.0 and 19.0; keeping the branch
+        # allows a future switch to JSON-RPC without touching callers.
+        if self.version == "19.0":
+            endpoint_mode = "xmlrpc2"
+        else:
+            endpoint_mode = "xmlrpc2"
+
+        base_url = f"{self.url}/"
+        return {
+            "common": f"{base_url.rstrip('/')}{common_path}",
+            "object": f"{base_url.rstrip('/')}{object_path}",
+            "endpoint_mode": endpoint_mode,
+        }
 
 
 class ServerConfig(BaseModel):
@@ -110,6 +141,7 @@ class Config(BaseModel):
             password=os.environ.get("ODOO_PASSWORD"),
             api_key=os.environ.get("ODOO_API_KEY"),
             timeout=int(os.environ.get("ODOO_TIMEOUT", "120")),
+            version=os.environ.get("ODOO_VERSION", "18.0"),
         )
         
         # Server configuration (optional with defaults)
@@ -134,6 +166,14 @@ class Config(BaseModel):
             cache=cache_config
         )
 
+    @classmethod
+    def from_yaml(cls, path: Path) -> "Config":
+        """Create configuration from a YAML file."""
+        with path.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+
+        return cls.model_validate(data)
+
 
 # Global configuration instance
 config: Optional[Config] = None
@@ -144,5 +184,25 @@ def get_config() -> Config:
     global config
     if config is None:
         load_dotenv()
-        config = Config.from_env()
+        config_path = Path(os.environ.get("CONFIG_FILE", "config.yml"))
+
+        if config_path.exists():
+            try:
+                config = Config.from_yaml(config_path)
+            except Exception:
+                # Fall back to environment variables if YAML is invalid
+                try:
+                    config = Config.from_env()
+                except KeyError as exc:
+                    missing = exc.args[0]
+                    raise ValueError(f"Missing required configuration value: {missing}") from exc
+        else:
+            try:
+                config = Config.from_env()
+            except KeyError as exc:
+                missing = exc.args[0]
+                raise ValueError(
+                    f"Missing required configuration value: {missing}. "
+                    "Provide CONFIG_FILE or set the ODOO_URL/ODOO_DB/ODOO_USERNAME variables."
+                ) from exc
     return config

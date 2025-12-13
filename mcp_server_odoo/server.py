@@ -8,9 +8,9 @@ from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.types import TextContent, Tool
-from pydantic import ValidationError
 
-from .odoo_client import OdooClient, OdooConfig
+from .config import get_config
+from .odoo_client import OdooClient
 
 # Load environment variables
 load_dotenv()
@@ -28,16 +28,9 @@ def get_odoo_client() -> OdooClient:
     
     if odoo_client is None:
         try:
-            config = OdooConfig(
-                url=os.environ["ODOO_URL"],
-                database=os.environ["ODOO_DB"],
-                username=os.environ["ODOO_USERNAME"],
-                password=os.environ.get("ODOO_PASSWORD"),
-                api_key=os.environ.get("ODOO_API_KEY"),
-                timeout=int(os.environ.get("ODOO_TIMEOUT", "120")),
-            )
+            config = get_config().odoo
             odoo_client = OdooClient(config)
-        except (KeyError, ValidationError) as e:
+        except Exception as e:
             raise ValueError(f"Invalid Odoo configuration: {e}")
     
     return odoo_client

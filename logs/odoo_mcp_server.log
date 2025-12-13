@@ -1406,3 +1406,14 @@
 2025-11-24 03:22:11 | WARNING  | mcp_server_odoo.http_server:api_key_middleware:704 - Unauthorized access attempt from 157.245.177.5
 2025-11-24 03:28:55 | WARNING  | mcp_server_odoo.http_server:api_key_middleware:704 - Unauthorized access attempt from 65.49.1.25
 2025-11-24 05:21:21 | WARNING  | mcp_server_odoo.http_server:api_key_middleware:704 - Unauthorized access attempt from 167.99.211.35
+2025-12-13 18:28:23 | INFO     | mcp_server_odoo.http_server:lifespan:658 - Starting Odoo MCP HTTP Server...
+2025-12-13 18:28:23 | INFO     | mcp_server_odoo.services.cache_service:__init__:34 - Cache service initialized - enabled: True, TTL: 300s, max_size: 1000
+2025-12-13 18:28:23 | INFO     | mcp_server_odoo.services.odoo_service:__init__:43 - Odoo service initialized for http://localhost:8069/dummy
+2025-12-13 18:28:23 | DEBUG    | mcp_server_odoo.services.cache_service:get:81 - Cache miss: auth:admin:dummy
+2025-12-13 18:28:23 | INFO     | mcp_server_odoo.services.odoo_service:authenticate:55 - Authenticating with Odoo...
+2025-12-13 18:28:23 | WARNING  | mcp_server_odoo.http_server:lifespan:665 - Odoo connection test failed: [Errno 1] Operation not permitted
+2025-12-13 18:28:28 | INFO     | mcp_server_odoo.http_server:lifespan:669 - Shutting down Odoo MCP HTTP Server...
+2025-12-13 18:43:48 | INFO     | mcp_server_odoo.services.cache_service:__init__:34 - Cache service initialized - enabled: True, TTL: 300s, max_size: 1000
+2025-12-13 18:43:48 | INFO     | mcp_server_odoo.services.odoo_service:__init__:60 - Odoo service initialized for https://example.com/demo (version=19.0, endpoint_mode=xmlrpc2)
+2025-12-13 18:44:12 | INFO     | mcp_server_odoo.services.cache_service:__init__:34 - Cache service initialized - enabled: True, TTL: 300s, max_size: 1000
+2025-12-13 18:44:12 | INFO     | mcp_server_odoo.services.odoo_service:__init__:60 - Odoo service initialized for https://example.com/demo (version=19.0, endpoint_mode=xmlrpc2)

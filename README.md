@@ -97,6 +97,14 @@ CACHE_TTL=300
 CACHE_MAX_SIZE=1000
 ```
 
+You can also configure the server via YAML. Copy `config.example.yml` to `config.yml` and adjust the values, including `odoo.version` (supported: `18.0` or `19.0`):
+
+```bash
+cp config.example.yml config.yml
+```
+
+Set `odoo.version` to `19.0` to target the `/xmlrpc/2/common` and `/xmlrpc/2/object` endpoints used by Odoo 19.0; use `18.0` to keep the current XML-RPC behaviour.
+
 ### Step 3: Build and Run the Server
 
 ```bash

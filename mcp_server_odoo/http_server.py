@@ -16,7 +16,7 @@ from mcp.types import Tool, TextContent
 
 from .config import get_config
 from .logger import get_logger
-from .services.odoo_service import get_odoo_service
+from .services.odoo_service import OdooServiceError, get_odoo_service
 from .services.cache_service import get_cache_service
 
 logger = get_logger(__name__)
@@ -52,6 +52,11 @@ def _fix_tool_schema(tool_dict: Dict[str, Any]) -> Dict[str, Any]:
     tool_dict["annotations"] = cleaned_annotations
     
     return tool_dict
+
+
+def _as_text_content(payload: Dict[str, Any]) -> List[TextContent]:
+    """Convert a response payload into MCP text content."""
+    return [TextContent(type="text", text=json.dumps(payload, indent=2, default=str))]
 
 
 async def get_all_tools() -> List[Dict[str, Any]]:
@@ -358,16 +363,17 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     """Call a tool and return the result."""
     logger.info(f"Tool called: {name} with arguments: {arguments}")
     
+    odoo_service = get_odoo_service()
+
     try:
-        odoo_service = get_odoo_service()
-        
         # Record management tools
         if name == "create_record":
             model = arguments["model"]
             values = arguments["values"]
             logger.info(f"Creating record in {model}")
             result = odoo_service.create(model, values)
-            return [TextContent(type="text", text=json.dumps({"id": result, "message": f"Created record with ID: {result}"}, indent=2))]
+            payload = odoo_service.build_success({"id": result, "message": f"Created record with ID: {result}"})
+            return _as_text_content(payload)
         
         elif name == "update_record":
             model = arguments["model"]
@@ -375,14 +381,16 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             values = arguments["values"]
             logger.info(f"Updating {len(ids)} record(s) in {model}")
             success = odoo_service.write(model, ids, values)
-            return [TextContent(type="text", text=json.dumps({"success": success, "ids": ids, "message": f"Update {'successful' if success else 'failed'} for IDs: {ids}"}, indent=2))]
+            payload = odoo_service.build_success({"success": success, "ids": ids, "message": f"Update {'successful' if success else 'failed'} for IDs: {ids}"})
+            return _as_text_content(payload)
         
         elif name == "delete_record":
             model = arguments["model"]
             ids = arguments["ids"]
             logger.info(f"Deleting {len(ids)} record(s) from {model}")
             success = odoo_service.unlink(model, ids)
-            return [TextContent(type="text", text=json.dumps({"success": success, "ids": ids, "message": f"Delete {'successful' if success else 'failed'} for IDs: {ids}"}, indent=2))]
+            payload = odoo_service.build_success({"success": success, "ids": ids, "message": f"Delete {'successful' if success else 'failed'} for IDs: {ids}"})
+            return _as_text_content(payload)
         
         elif name == "get_record":
             model = arguments["model"]
@@ -390,7 +398,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             fields = arguments.get("fields")
             logger.info(f"Getting {len(ids)} record(s) from {model}")
             result = odoo_service.read(model, ids, fields)
-            return [TextContent(type="text", text=json.dumps({"records": result, "count": len(result)}, indent=2, default=str))]
+            records = result if isinstance(result, list) else [result]
+            payload = odoo_service.build_success({"records": result, "count": len(records)})
+            return _as_text_content(payload)
         
         elif name == "execute_method":
             model = arguments["model"]
@@ -400,13 +410,15 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             kwargs = arguments.get("kwargs", {})
             logger.info(f"Executing method '{method}' on {model} with IDs: {ids}")
             
+            odoo_service._validate_model(model)
             # Prepare arguments - if ids are provided, add them to args
             if ids:
                 args = [ids] + list(args)
             
             # Execute the method
             result = odoo_service.execute(model, method, *args, **kwargs)
-            return [TextContent(type="text", text=json.dumps({"result": result}, indent=2, default=str))]
+            payload = odoo_service.build_success({"result": result})
+            return _as_text_content(payload)
         
         # Search tools
         elif name == "search_records":
@@ -426,7 +438,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 limit=limit,
                 order=order,
             )
-            return [TextContent(type="text", text=json.dumps({"records": result, "count": len(result)}, indent=2, default=str))]
+            payload = odoo_service.build_success({"records": result, "count": len(result)})
+            return _as_text_content(payload)
         
         elif name == "search_count":
             model = arguments["model"]
@@ -434,7 +447,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             logger.info(f"Counting records in {model} with domain: {domain}")
             ids = odoo_service.search(model=model, domain=domain)
             count = len(ids)
-            return [TextContent(type="text", text=json.dumps({"count": count, "message": f"Found {count} records matching the criteria"}, indent=2))]
+            payload = odoo_service.build_success({"count": count, "message": f"Found {count} records matching the criteria"})
+            return _as_text_content(payload)
         
         # Model tools
         elif name == "list_models":
@@ -442,7 +456,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             search_term = arguments.get("search", "").lower()
             
             logger.info(f"Listing models (transient: {include_transient}, search: '{search_term}')")
-            models = odoo_service.get_model_list()
+            models, cache_status = odoo_service.get_model_list(return_cache_status=True)
             
             # Filter models
             filtered_models = []
@@ -457,7 +471,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             # Format output
             if not filtered_models:
-                return [TextContent(type="text", text=json.dumps({"models": [], "count": 0, "message": "No models found matching the criteria."}, indent=2))]
+                payload = odoo_service.build_success({"models": [], "count": 0, "message": "No models found matching the criteria."}, {"model_list": cache_status})
+                return _as_text_content(payload)
             
             output = f"Found {len(filtered_models)} Odoo models:\n\n"
             for model in sorted(filtered_models, key=lambda x: x["model"]):
@@ -465,7 +480,11 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 output += f"• **{model['model']}**{transient_marker}\n"
                 output += f"  {model['name']}\n\n"
             
-            return [TextContent(type="text", text=json.dumps({"models": filtered_models, "count": len(filtered_models), "formatted_output": output}, indent=2))]
+            payload = odoo_service.build_success(
+                {"models": filtered_models, "count": len(filtered_models), "formatted_output": output},
+                {"model_list": cache_status},
+            )
+            return _as_text_content(payload)
         
         elif name == "get_model_fields":
             model = arguments["model"]
@@ -473,14 +492,16 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             attributes = arguments.get("attributes")
             
             logger.info(f"Getting fields for model: {model}")
-            field_info = odoo_service.fields_get(
+            field_info, cache_status = odoo_service.fields_get(
                 model=model,
                 fields=fields,
-                attributes=attributes
+                attributes=attributes,
+                return_cache_status=True,
             )
             
             if not field_info:
-                return [TextContent(type="text", text=json.dumps({"fields": {}, "count": 0, "message": f"No fields found for model: {model}"}, indent=2))]
+                payload = odoo_service.build_success({"fields": {}, "count": 0, "message": f"No fields found for model: {model}"}, {"fields_get": cache_status})
+                return _as_text_content(payload)
             
             # Format output for better readability
             output = f"Fields for model **{model}**:\n\n"
@@ -499,29 +520,40 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 
                 output += "\n"
             
-            return [TextContent(type="text", text=json.dumps({"fields": field_info, "count": len(field_info), "formatted_output": output}, indent=2))]
+            payload = odoo_service.build_success(
+                {"fields": field_info, "count": len(field_info), "formatted_output": output},
+                {"fields_get": cache_status},
+            )
+            return _as_text_content(payload)
         
         elif name == "model_info":
             model = arguments["model"]
             logger.info(f"Getting comprehensive info for model: {model}")
             
-            # Get model metadata
-            models = odoo_service.get_model_list()
+            odoo_service._validate_model(model)
+            models, model_cache_status = odoo_service.get_model_list(return_cache_status=True)
             model_info = next((m for m in models if m["model"] == model), None)
             
             if not model_info:
-                return [TextContent(type="text", text=json.dumps({"error": f"Model '{model}' not found."}, indent=2))]
+                return _as_text_content(
+                    odoo_service.build_error(
+                        OdooServiceError("invalid_model", f"Model '{model}' not found.", "Use list_models to verify the model name", True)
+                    )
+                )
             
             # Get field count
-            field_info = odoo_service.fields_get(model=model)
+            field_info, fields_cache_status = odoo_service.fields_get(model=model, return_cache_status=True)
             field_count = len(field_info)
             
             # Get record count (sample)
             try:
                 sample_ids = odoo_service.search(model=model, limit=1)
                 has_records = len(sample_ids) > 0
-            except:
+            except Exception as exc:
                 has_records = "Unknown"
+                if isinstance(exc, Exception):
+                    # If search fails, include structured error details
+                    logger.debug(f"Sample record lookup failed for {model}: {exc}")
             
             # Format comprehensive output
             output = f"# Model Information: **{model}**\n\n"
@@ -546,13 +578,15 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             output += f"Use `get_model_fields` with model='{model}' to see all field details."
             
-            return [TextContent(type="text", text=json.dumps({
+            cache_meta = {"model_list": model_cache_status, "fields_get": fields_cache_status}
+            payload = odoo_service.build_success({
                 "model_info": model_info,
                 "field_count": field_count,
                 "has_records": has_records,
                 "key_fields": key_fields[:10],
                 "formatted_output": output
-            }, indent=2))]
+            }, cache_meta)
+            return _as_text_content(payload)
         
         # Server management tools
         elif name == "server_status":
@@ -562,21 +596,25 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             return await handle_cache_stats(arguments)
         
         else:
-            return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}, indent=2))]
+            return _as_text_content(
+                odoo_service.build_error(
+                    OdooServiceError("invalid_method", f"Unknown tool: {name}", "Call tools/list to see supported tools", True)
+                )
+            )
                 
     except Exception as e:
         logger.error(f"Error handling tool {name}: {e}", exc_info=True)
-        return [TextContent(type="text", text=json.dumps({"error": f"{type(e).__name__}: {str(e)}"}, indent=2))]
+        return _as_text_content(odoo_service.build_error(e))
 
     
 async def handle_server_status(arguments: Dict[str, Any]) -> List[TextContent]:
     """Handle server status requests."""
     config = get_config()
     cache_service = get_cache_service()
+    odoo_service = get_odoo_service()
     
     # Test Odoo connection
     try:
-        odoo_service = get_odoo_service()
         odoo_service.authenticate()
         odoo_connected = True
     except Exception as e:
@@ -608,7 +646,7 @@ async def handle_server_status(arguments: Dict[str, Any]) -> List[TextContent]:
     output += f"**Debug:** {config.server.debug}\n"
     output += f"**Log Level:** {config.server.log_level}\n"
         
-    return [TextContent(type="text", text=json.dumps({
+    payload = odoo_service.build_success({
         "status": "HEALTHY" if odoo_connected else "DEGRADED",
         "version": "1.0.0",
         "uptime": uptime,
@@ -623,17 +661,21 @@ async def handle_server_status(arguments: Dict[str, Any]) -> List[TextContent]:
             "log_level": config.server.log_level
         },
         "formatted_output": output
-    }, indent=2))]
+    })
+
+    return _as_text_content(payload)
 
 
 async def handle_cache_stats(arguments: Dict[str, Any]) -> List[TextContent]:
     """Handle cache statistics requests."""
     cache_service = get_cache_service()
+    odoo_service = get_odoo_service()
     action = arguments.get("action", "stats")
     
     if action == "clear":
         cache_service.clear()
-        return [TextContent(type="text", text=json.dumps({"success": True, "message": "Cache cleared successfully"}, indent=2))]
+        payload = odoo_service.build_success({"success": True, "message": "Cache cleared successfully"})
+        return _as_text_content(payload)
     
     # Get cache statistics
     stats = cache_service.stats()
@@ -645,11 +687,12 @@ async def handle_cache_stats(arguments: Dict[str, Any]) -> List[TextContent]:
     output += f"**TTL:** {stats['ttl']} seconds\n"
     output += f"**Usage:** {(stats['size'] / stats['max_size'] * 100):.1f}%\n"
     
-    return [TextContent(type="text", text=json.dumps({
+    payload = odoo_service.build_success({
         "cache_stats": stats,
         "usage_percentage": (stats['size'] / stats['max_size'] * 100),
         "formatted_output": output
-    }, indent=2))]
+    })
+    return _as_text_content(payload)
 
 
 @asynccontextmanager

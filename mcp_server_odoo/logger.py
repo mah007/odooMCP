@@ -47,8 +47,12 @@ def setup_logging(log_file: Optional[str] = None) -> None:
         filter=lambda record: record["name"].startswith("mcp_server_odoo")
     )
 
-    config = get_config()
-    if config.server.log_level == "DEBUG":
+    try:
+        config = get_config()
+    except Exception:
+        config = None
+
+    if config and config.server.log_level == "DEBUG":
         # Enable debug logging for our modules only
         logger.add(
             sys.stdout,

@@ -1,0 +1,19 @@
+odoo:
+  url: "https://your-odoo-instance"
+  database: "your_database"
+  username: "admin"
+  password: "your_password"
+  version: "18.0"  # or "19.0"
+  timeout: 120
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  debug: false
+  log_level: "INFO"
+  api_key: "change-me"
+
+cache:
+  enabled: true
+  ttl: 300
+  max_size: 1000
