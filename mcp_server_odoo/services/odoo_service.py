@@ -42,10 +42,11 @@ class OdooService:
         self.object_endpoint = endpoints["object"]
         self.report_endpoint = endpoints.get("report")
         
-        # Create SSL context that doesn't verify certificates (for development)
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
+        # SSL context: verify certificates by default; allow opt-out via config
+        if self.config.verify_ssl:
+            ssl_context = ssl.create_default_context()
+        else:
+            ssl_context = ssl._create_unverified_context()
         
         # Initialize XML-RPC clients with SSL context
         self.common = xmlrpc.client.ServerProxy(
@@ -720,7 +721,7 @@ class OdooService:
             login_url = f"{base_url}/web/session/authenticate"
             report_url = f"{base_url}/report/pdf/{report_name}/{','.join(map(str, ids))}"
             try:
-                with httpx.Client(verify=False, timeout=self.config.timeout) as client:
+                with httpx.Client(verify=self.config.verify_ssl, timeout=self.config.timeout) as client:
                     auth_payload = {
                         "jsonrpc": "2.0",
                         "params": {

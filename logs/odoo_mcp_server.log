@@ -2478,3 +2478,11 @@ Private methods (such as 'ir.actions.report._render_qweb_pdf') cannot be called 
 2025-12-13 22:55:03 | ERROR    | mcp_server_odoo.services.odoo_service:execute:294 - Execution failed: <Fault 2: "Object report.report doesn't exist">
 2025-12-13 22:55:04 | ERROR    | mcp_server_odoo.http_server:mcp_endpoint:991 - Error calling tool generate_report: "'jsonrpc'"
 2025-12-13 22:56:35 | INFO     | mcp_server_odoo.http_server:lifespan:809 - Shutting down Odoo MCP HTTP Server...
+2025-12-19 22:53:23 | INFO     | mcp_server_odoo.http_server:lifespan:798 - Starting Odoo MCP HTTP Server...
+2025-12-19 22:53:23 | INFO     | mcp_server_odoo.services.cache_service:__init__:34 - Cache service initialized - enabled: True, TTL: 300s, max_size: 1000
+2025-12-19 22:53:23 | INFO     | mcp_server_odoo.services.odoo_service:__init__:71 - Odoo service initialized for http://host.docker.internal:8069/samayainv (version=18.0, endpoint_mode=xmlrpc2)
+2025-12-19 22:53:23 | DEBUG    | mcp_server_odoo.services.cache_service:get:81 - Cache miss: auth:admin:samayainv
+2025-12-19 22:53:23 | INFO     | mcp_server_odoo.services.odoo_service:authenticate:244 - Authenticating with Odoo...
+2025-12-19 22:53:23 | DEBUG    | mcp_server_odoo.services.cache_service:set:105 - Cache set: auth:admin:samayainv (TTL: 3600s)
+2025-12-19 22:53:23 | INFO     | mcp_server_odoo.services.odoo_service:authenticate:265 - Authentication successful, user ID: 2
+2025-12-19 22:53:23 | INFO     | mcp_server_odoo.http_server:lifespan:803 - Odoo connection test successful

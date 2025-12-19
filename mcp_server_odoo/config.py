@@ -23,6 +23,7 @@ class OdooConfig(BaseModel):
     timeout: int = Field(120, description="Request timeout in seconds")
     version: str = Field("18.0", description="Odoo version (e.g. '18.0' or '19.0')")
     endpoint_mode: str = Field("xmlrpc2", description="RPC endpoint mode: 'xmlrpc2' or legacy 'xmlrpc'")
+    verify_ssl: bool = Field(False, description="Verify TLS certificates for Odoo XML-RPC/HTTP calls (optional)")
 
     @field_validator("url")
     @classmethod
@@ -57,6 +58,12 @@ class OdooConfig(BaseModel):
         if normalized not in {"xmlrpc2", "xmlrpc"}:
             raise ValueError("Endpoint mode must be one of: xmlrpc2, xmlrpc")
         return normalized
+
+    @field_validator("verify_ssl")
+    @classmethod
+    def validate_verify_ssl(cls, v: bool) -> bool:
+        """Ensure verify_ssl is boolean."""
+        return bool(v)
 
     def model_post_init(self, __context: Any) -> None:
         """Validate that either password or api_key is provided."""
@@ -155,6 +162,7 @@ class Config(BaseModel):
             timeout=int(os.environ.get("ODOO_TIMEOUT", "120")),
             version=os.environ.get("ODOO_VERSION", "18.0"),
             endpoint_mode=os.environ.get("ODOO_ENDPOINT_MODE", "xmlrpc2"),
+            verify_ssl=os.environ.get("ODOO_VERIFY_SSL", "false").lower() == "true",
         )
         
         # Server configuration (optional with defaults)
