@@ -33,9 +33,7 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/vzeman/odoo-mcp-server"
-"Bug Tracker" = "https://github.com/vzeman/odoo-mcp-server/issues"
-"Documentation" = "https://github.com/vzeman/odoo-mcp-server#readme"
+
 
 [project.optional-dependencies]
 dev = [
