@@ -1,139 +1,205 @@
-# Odoo MCP Server (Enhanced for AI Agents)
-
-![Odoo MCP Server Banner](./docs/odoo_mcp_banner.png) <!-- Replace with a real banner image -->
+# Odoo MCP Server v2
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![Odoo Version](https://img.shields.io/badge/Odoo-10.0%20to%2018.0-blueviolet)](https://www.odoo.com/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-required-blue)](https://www.docker.com/)
+[![Odoo](https://img.shields.io/badge/Odoo-16.0%20%E2%80%93%2018.0-blueviolet)](https://www.odoo.com/)
+
+A production-ready [Model Context Protocol](https://modelcontextprotocol.io/) server for Odoo, with a built-in web admin UI. Lets any MCP-compatible AI agent (Claude, ChatGPT, n8n, etc.) query and manipulate Odoo data securely over JSON-RPC 2.0.
 
 ---
 
-## Introduction
+## Architecture
 
-This project provides an enhanced, production-ready **Odoo MCP (Middleware/Connector/Proxy) Server**, designed to act as a secure and intelligent bridge between your Odoo instance and modern AI agents like **ChatGPT** and **Google Gemini**, especially within automation platforms like **n8n**.
+One Docker container, two services:
 
-This server exposes a secure, JSON-RPC 2.0 compliant API that translates simple, standardized requests into complex Odoo XML-RPC commands. This allows AI agents to safely and effectively query and manipulate your Odoo data without needing direct access to your Odoo instance.
-
-### Key Features
-
-- **AI Agent Ready:** Provides a clear, well-defined set of tools for AI agents to interact with Odoo.
-- **Secure:** Implements API Key authentication to protect your Odoo data from unauthorized access.
-- **Robust:** Includes comprehensive error handling to provide clear feedback to the AI agent.
-- **High-Performance:** Built on FastAPI for asynchronous, high-throughput performance.
-- **Easy to Deploy:** Comes with a simple, Docker-based deployment process.
-- **Broad Odoo Compatibility:** Designed to be a general-purpose solution for Odoo versions 10.0 through 18.0.
-
----
-
-## Acknowledgements
-
-This project is an enhanced version of the original `odoo-mcp-server` created by **Václav Zeman**. We extend our sincere thanks to him for providing the excellent foundation for this project.
-
-This enhanced version was fixed and improved by **Mahmoud Abdel Latif** to be a more general-purpose, secure, and AI-ready solution for the Odoo, n8n, and AI communities.
-
----
-
-## How It Works
-
-The Odoo MCP Server acts as a secure intermediary:
-
-1.  **AI Agent (ChatGPT/Gemini):** The AI agent, running in a platform like n8n, decides it needs to query Odoo.
-2.  **n8n Workflow:** The AI agent calls a tool in its n8n workflow.
-3.  **MCP Client Node:** The n8n MCP Client node sends a secure, JSON-RPC request to the Odoo MCP Server, including the secret API Key.
-4.  **Odoo MCP Server:** The server validates the API Key, receives the request, and translates it into a standard Odoo XML-RPC call.
-5.  **Odoo Instance:** The MCP server executes the command on your Odoo instance.
-6.  **Response:** The result is passed back through the chain to the AI agent, which then formulates a natural language response for the user.
-
-![Architecture Diagram](./docs/odoo_mcp_architecture.png) <!-- Replace with a real architecture diagram -->
+```
+┌─────────────────────────────────────────────┐
+│                                             │
+│  MCP Service          port 9100 (default)   │
+│  JSON-RPC 2.0 endpoint at POST /mcp         │
+│  · X-API-Key header authentication          │
+│  · 10 Odoo tools (search, CRUD, execute…)   │
+│  · Logs every request to SQLite             │
+│                                             │
+│  Controller / Admin UI  port 9101 (default) │
+│  React SPA + REST API at /api/*             │
+│  · First-run setup wizard                   │
+│  · Odoo connection CRUD + live test         │
+│  · API key management                       │
+│  · Dashboard: request stats + error log     │
+│                                             │
+│  Shared SQLite DB  data/mcp.db              │
+└─────────────────────────────────────────────┘
+```
 
 ---
 
-## Deployment
+## Quick Start
 
-### Prerequisites
-
-- A server running a Linux distribution (e.g., Ubuntu 22.04)
-- Docker and Docker Compose installed
-- A running Odoo instance (version 10.0 to 18.0)
-
-### Step 1: Clone the Repository
+### 1. Clone and configure
 
 ```bash
 git clone https://github.com/mah007/odooMCP.git
 cd odooMCP
+cp .env.example .env
 ```
 
-### Step 2: Configure the Environment
-
-Create a `.env` file in the root of the project directory:
+Edit `.env` — only three values needed:
 
 ```bash
-cp docker-compose.example.yml .env
+# Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+SECRET_KEY=your-random-32-byte-hex-string
+
+MCP_PORT=9100
+CONTROLLER_PORT=9101
 ```
 
-Now, edit the `.env` file with your specific configuration:
+> Odoo credentials are **not** stored in `.env`. You configure them through the admin UI after first boot.
+
+### 2. Build and start
 
 ```bash
-# Odoo Connection Details
-ODOO_URL=https://your-odoo-instance.com
-ODOO_DB=your_database_name
-ODOO_USERNAME=your_odoo_user
-ODOO_API_KEY=your_odoo_api_key_or_password
-
-# MCP Server Configuration
-MCP_HOST=0.0.0.0
-MCP_PORT=8000
-MCP_DEBUG=false
-MCP_LOG_LEVEL=INFO
-
-# NEW: API Key for MCP Server Authentication
-# Generate a strong key with: openssl rand -hex 32
-MCP_API_KEY=your_super_secret_mcp_api_key
-
-# Cache Configuration
-CACHE_ENABLED=true
-CACHE_TTL=300
-CACHE_MAX_SIZE=1000
+docker compose up --build -d
+docker compose logs -f
 ```
 
-### Step 3: Build and Run the Server
+### 3. First-run setup
+
+1. Open `http://localhost:9101` → you'll be redirected to `/setup`
+2. Create an admin account
+3. Log in → go to **Connections** → **Add Connection**
+4. Fill in your Odoo URL, database, username, and API key/password → **Test** → **Activate**
+5. Go to **API Keys** → **Generate** → copy the key (shown once)
+
+### 4. Call the MCP endpoint
 
 ```bash
-docker-compose up --build -d
+# List available tools
+curl -s -X POST http://localhost:9100/mcp \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_KEY" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' | jq .
+
+# Search for customers
+curl -s -X POST http://localhost:9100/mcp \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_KEY" \
+  -d '{
+    "jsonrpc":"2.0","method":"tools/call","id":2,
+    "params":{
+      "name":"search_records",
+      "arguments":{"model":"res.partner","domain":[["customer_rank",">",0]],"fields":["name","email"],"limit":10}
+    }
+  }' | jq .
 ```
-
-### Step 4: Verify the Server is Running
-
-Check the logs to ensure the server started correctly:
-
-```bash
-docker-compose logs -f
-```
-
-You should see a message like: `Uvicorn running on http://0.0.0.0:8000`.
 
 ---
 
-## n8n Integration
+## Available Tools
 
-1.  **Add the MCP Client Node:** In your n8n workflow, add the **MCP Client** node.
-2.  **Configure the Endpoint:** Set the **Endpoint URL** to your server: `http://<your_server_ip>:8000`.
-3.  **Add API Key Authentication:**
-    -   **Authentication:** `Header Auth`
-    -   **Name:** `X-API-Key`
-    -   **Value:** Your `MCP_API_KEY` from the `.env` file.
+| Tool | Description |
+|------|-------------|
+| `search_records` | Search records with an Odoo domain filter |
+| `get_record` | Fetch specific records by ID |
+| `create_record` | Create a new record |
+| `update_record` | Update existing records |
+| `delete_record` | Delete records by ID |
+| `search_count` | Count records matching a domain |
+| `list_models` | List all available Odoo models |
+| `get_model_fields` | Get field definitions for a model |
+| `model_info` | Get metadata for a model (name, field count, etc.) |
+| `execute_method` | Call any method on any model (`read_group`, `name_search`, etc.) |
 
 ---
 
-## Feedback and Contributions
+## Connecting an AI Agent
 
-This project is made with ❤️ by **Mahmoud Abdel Latif** for the Odoo, n8n, and AI communities.
+### Claude / Claude Code
 
-If you encounter any errors or bugs, or have suggestions for improvements, please [open an issue](https://github.com/mah007/odooMCP/issues) on the GitHub repository. We welcome all feedback and contributions!
+Add to your MCP config (`~/.claude/mcp_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "odoo": {
+      "url": "http://localhost:9100/mcp",
+      "headers": { "X-API-Key": "YOUR_KEY" }
+    }
+  }
+}
+```
+
+### n8n
+
+1. Add an **MCP Client** node
+2. Set **Endpoint URL** to `http://<server>:9100/mcp`
+3. Set **Authentication** → Header Auth → Name: `X-API-Key`, Value: your key
+
+### Direct HTTP (any HTTP client)
+
+All calls are `POST /mcp` with `Content-Type: application/json` and `X-API-Key` header. The body is a standard JSON-RPC 2.0 object:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "<tool_name>",
+    "arguments": { ... }
+  }
+}
+```
+
+---
+
+## Admin UI Endpoints
+
+All routes require `Authorization: Bearer <JWT>` except `/api/auth/*`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/setup` | Create first admin (only works once) |
+| POST | `/api/auth/login` | Login → JWT (24h) |
+| GET/POST | `/api/connections` | List / add Odoo connections |
+| PUT/DELETE | `/api/connections/{id}` | Edit / delete a connection |
+| POST | `/api/connections/{id}/test` | Live XML-RPC test |
+| POST | `/api/connections/{id}/activate` | Set as active connection |
+| GET/POST | `/api/api-keys` | List / generate API keys |
+| DELETE | `/api/api-keys/{id}` | Revoke an API key |
+| GET | `/api/dashboard` | Stats + recent error log |
+
+---
+
+## Security
+
+- API keys are stored as **bcrypt hashes** — the plaintext is shown once at generation and never stored
+- Odoo credentials are stored **Fernet-encrypted** using `SECRET_KEY`
+- Admin sessions use **JWT** (24h expiry, signed with `SECRET_KEY`)
+- `SECRET_KEY` is the only secret that must be kept safe; rotate it by updating `.env` and restarting
+
+---
+
+## Development
+
+```bash
+# Install dependencies
+pip install -e ".[dev]"
+
+# Run services locally (without Docker)
+cp .env.example .env  # edit as needed
+uvicorn src.mcp.app:app --port 9100 &
+uvicorn src.controller.app:app --port 9101
+
+# Build frontend separately
+cd frontend && npm install && npm run build
+```
 
 ---
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).
+
+Built by **Mahmoud Abdel Latif**. Based on the original `odoo-mcp-server` by Václav Zeman.
