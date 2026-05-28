@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Connections from './pages/Connections'
 import ApiKeys from './pages/ApiKeys'
+import Settings from './pages/Settings'
 import Layout from './components/Layout'
 
 function AppRoutes() {
@@ -37,6 +38,7 @@ function AppRoutes() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/connections" element={<Connections />} />
         <Route path="/api-keys" element={<ApiKeys />} />
+        <Route path="/settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -62,6 +62,18 @@ export const api = {
   dashboard: {
     get: () => request<DashboardData>('/dashboard'),
   },
+
+  admins: {
+    list: () => request<AdminRow[]>('/admins'),
+    create: (username: string, password: string) =>
+      request<AdminRow>('/admins', { method: 'POST', body: JSON.stringify({ username, password }) }),
+    delete: (id: number) => request<void>(`/admins/${id}`, { method: 'DELETE' }),
+    changePassword: (current_password: string, new_password: string) =>
+      request<{ message: string }>('/admins/me/password', {
+        method: 'PUT',
+        body: JSON.stringify({ current_password, new_password }),
+      }),
+  },
 }
 
 // Types
@@ -96,6 +108,13 @@ export interface ApiKeyRow {
   created_at: string | null
   last_used_at: string | null
   request_count: number
+}
+
+export interface AdminRow {
+  id: number
+  username: string
+  is_active: boolean
+  created_at: string | null
 }
 
 export interface DashboardData {

@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from src.shared.database import init_db
-from src.controller.routes import auth, connections, api_keys, dashboard
+from src.controller.routes import auth, connections, api_keys, dashboard, admins
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -34,6 +34,7 @@ app.include_router(auth.router)
 app.include_router(connections.router)
 app.include_router(api_keys.router)
 app.include_router(dashboard.router)
+app.include_router(admins.router)
 
 # Serve built React SPA — only if the static directory exists (i.e. after frontend build)
 if STATIC_DIR.exists():
