@@ -1,26 +1,16 @@
-# version: '3.8'
-
 services:
   mcp-server:
     build: .
     ports:
-      - "8000:8000"
+      - "${MCP_PORT:-8000}:8000"
+      - "${CONTROLLER_PORT:-8001}:8001"
+    env_file:
+      - .env
     environment:
-      - ODOO_URL=https://test.com
-      - ODOO_DB=mydataDB
-      - ODOO_USERNAME=me@test.com
-      - ODOO_API_KEY=MyPass@1234
-      - MCP_API_KEY=a7f3c9e2b8d4f1a6c5e8d9b2a4d7c1e3b6d8a9f2c4e7b1d3a5f8c2e6f9d1a4d7
-
-      - MCP_HOST=0.0.0.0
       - MCP_PORT=8000
-      - MCP_DEBUG=false
-      - MCP_LOG_LEVEL=INFO
-
-      - CACHE_ENABLED=true
-      - CACHE_TTL=300
-      - CACHE_MAX_SIZE=1000
+      - CONTROLLER_PORT=8001
     volumes:
+      - ./data:/app/data
       - ./logs:/app/logs
     restart: unless-stopped
     healthcheck:
@@ -28,33 +18,4 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
-
-  # Optional: Redis for session management and caching
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    profiles:
-      - redis
-
-  # Optional: Nginx reverse proxy
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - mcp-server
-    restart: unless-stopped
-    profiles:
-      - proxy
-
-volumes:
-  redis_data:
+      start_period: 20s

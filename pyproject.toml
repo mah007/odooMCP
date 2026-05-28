@@ -1,67 +1,49 @@
 [project]
 name = "odoo-mcp-server"
-version = "0.2.0"
-description = "Hybrid MCP server for Odoo ERP integration - supports both HTTP streaming and stdio modes for AI assistants"
+version = "2.0.0"
+description = "Odoo MCP Server with Admin Controller UI"
 readme = "README.md"
-requires-python = ">=3.10"
-authors = [{name = "Viktor Zeman", email = "vzeman@gmail.com"}]
+requires-python = ">=3.11"
+authors = [{name = "Mahmoud Abdel Latif", email = "imod007@gmail.com"}]
 license = {text = "MIT"}
-keywords = ["mcp", "odoo", "erp", "ai", "assistant", "integration", "api-sports-pattern"]
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: Office/Business :: Financial :: Accounting",
-]
+keywords = ["mcp", "odoo", "erp", "ai", "integration"]
 
 dependencies = [
     "mcp==1.0.0",
-    "python-dotenv>=1.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "sqlalchemy>=2.0.0",
     "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
     "loguru>=0.7.0",
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.24.0",
-    "httpx>=0.25.0",
-    "sse-starlette>=1.6.0",
-    "python-multipart>=0.0.6",
+    "bcrypt>=4.0.0",
+    "pyjwt>=2.8.0",
+    "cryptography>=42.0.0",
+    "aiofiles>=23.0.0",
 ]
-
-[project.urls]
-"Homepage" = "https://github.com/vzeman/odoo-mcp-server"
-"Bug Tracker" = "https://github.com/vzeman/odoo-mcp-server/issues"
-"Documentation" = "https://github.com/vzeman/odoo-mcp-server#readme"
 
 [project.optional-dependencies]
 dev = [
+    "ruff>=0.6.0",
     "mypy>=1.0.0",
-    "ruff>=0.1.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-
-[tool.mypy]
-python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM"]
 ignore = ["E501"]
 
-[tool.hatch.build.targets.wheel]
-packages = ["mcp_server_odoo"]
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true

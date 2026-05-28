@@ -1,37 +1,40 @@
-# Use Python 3.11 slim image
-FROM python:3.11-slim
+# Stage 1: Build React frontend
+# vite.config.ts outDir is '../src/controller/static' relative to /build
+# so built assets land at /src/controller/static
+FROM node:20-alpine AS frontend-builder
+WORKDIR /build
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
 
-# Set working directory
+# Stage 2: Python runtime
+FROM python:3.11-slim
 WORKDIR /app
 
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_NO_CACHE_DIR=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy all files first
-COPY . .
+# Copy everything needed for install up front
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -e .
+# Install (non-editable so README.md + src are present)
+RUN pip install --no-cache-dir .
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash app \
-    && chown -R app:app /app
-USER app
+# Copy built frontend from Stage 1
+COPY --from=frontend-builder /src/controller/static ./src/controller/static
 
-# Expose port
-EXPOSE 8000
+COPY start.sh ./
+RUN chmod +x start.sh && mkdir -p data logs
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+EXPOSE 8000 8001
 
-# Run the application
-CMD ["python", "-m", "mcp_server_odoo.http_server"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:8000/health && curl -f http://localhost:8001/api/auth/status || exit 1
+
+CMD ["./start.sh"]
