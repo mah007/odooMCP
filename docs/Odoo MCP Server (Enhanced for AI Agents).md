@@ -1,6 +1,6 @@
 # Odoo MCP Server (Enhanced for AI Agents)
 
-![Odoo MCP Server Banner](./docs/odoo_mcp_banner.png) <!-- Replace with a real banner image -->
+![Odoo MCP Server Banner](https://i.imgur.com/your-banner-image.png) <!-- Replace with a real banner image -->
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
@@ -45,7 +45,7 @@ The Odoo MCP Server acts as a secure intermediary:
 5.  **Odoo Instance:** The MCP server executes the command on your Odoo instance.
 6.  **Response:** The result is passed back through the chain to the AI agent, which then formulates a natural language response for the user.
 
-![Architecture Diagram](./docs/odoo_mcp_architecture.png) <!-- Replace with a real architecture diagram -->
+![Architecture Diagram](https://i.imgur.com/your-architecture-diagram.png) <!-- Replace with a real architecture diagram -->
 
 ---
 
@@ -96,16 +96,6 @@ CACHE_ENABLED=true
 CACHE_TTL=300
 CACHE_MAX_SIZE=1000
 ```
-
-You can also configure the server via YAML. Copy `config.example.yml` to `config.yml` and adjust the values, including `odoo.version` (supported: `18.0` or `19.0`):
-
-```bash
-cp config.example.yml config.yml
-```
-
-Set `odoo.version` to `19.0` to target the `/xmlrpc/2/common` and `/xmlrpc/2/object` endpoints used by Odoo 19.0; use `18.0` to keep the current XML-RPC behaviour.
-
-If your Odoo only exposes the legacy `/xmlrpc/common` endpoints, set `odoo.endpoint_mode: xmlrpc` (or `ODOO_ENDPOINT_MODE=xmlrpc` in env vars).
 
 ### Step 3: Build and Run the Server
 
