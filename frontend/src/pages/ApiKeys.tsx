@@ -1,12 +1,26 @@
 import { useEffect, useState } from 'react'
-import { api, type ApiKeyRow } from '../lib/api'
+import { api, type ApiKeyRow, type ApiKeyScope } from '../lib/api'
+
+const SCOPE_LABEL: Record<ApiKeyScope, string> = {
+  write: 'Read & write',
+  read: 'Read only',
+}
+
+const SCOPE_BADGE: Record<ApiKeyScope, string> = {
+  write: 'bg-blue-50 text-blue-700 border-blue-200',
+  read: 'bg-amber-50 text-amber-700 border-amber-200',
+}
+
+const READ_ONLY_HINT = 'Read-only keys cannot create, update, delete or call methods.'
 
 export default function ApiKeys() {
   const [keys, setKeys] = useState<ApiKeyRow[]>([])
   const [newName, setNewName] = useState('')
-  const [newKey, setNewKey] = useState<string | null>(null)
+  const [newScope, setNewScope] = useState<ApiKeyScope>('write')
+  const [newKey, setNewKey] = useState<{ key: string; scope: ApiKeyScope } | null>(null)
   const [copied, setCopied] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [updating, setUpdating] = useState<number | null>(null)
   const [error, setError] = useState('')
 
   function load() {
@@ -20,14 +34,27 @@ export default function ApiKeys() {
     if (!newName.trim()) return
     setCreating(true)
     try {
-      const result = await api.apiKeys.create(newName.trim())
-      setNewKey(result.key)
+      const result = await api.apiKeys.create(newName.trim(), newScope)
+      setNewKey({ key: result.key, scope: result.scope ?? newScope })
       setNewName('')
       load()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Create failed')
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function changeScope(id: number, scope: ApiKeyScope) {
+    setUpdating(id)
+    setError('')
+    try {
+      const updated = await api.apiKeys.update(id, { scope })
+      setKeys(prev => prev.map(k => (k.id === id ? updated : k)))
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Update failed')
+    } finally {
+      setUpdating(null)
     }
   }
 
@@ -39,7 +66,7 @@ export default function ApiKeys() {
 
   function copy() {
     if (newKey) {
-      navigator.clipboard.writeText(newKey)
+      navigator.clipboard.writeText(newKey.key)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }
@@ -57,11 +84,11 @@ export default function ApiKeys() {
       {newKey && (
         <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl">
           <p className="text-sm font-semibold text-green-800 mb-1">
-            New API key generated — copy it now. It will not be shown again.
+            New {newKey.scope === 'read' ? 'read-only' : 'read & write'} API key generated — copy it now. It will not be shown again.
           </p>
           <div className="flex items-center gap-2 mt-2">
             <code className="flex-1 bg-white border border-green-300 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 break-all">
-              {newKey}
+              {newKey.key}
             </code>
             <button
               onClick={copy}
@@ -88,8 +115,17 @@ export default function ApiKeys() {
             placeholder="Key name (e.g. n8n-prod)"
             value={newName}
             onChange={e => setNewName(e.target.value)}
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+          <select
+            aria-label="Scope"
+            value={newScope}
+            onChange={e => setNewScope(e.target.value as ApiKeyScope)}
+            className="shrink-0 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="write">{SCOPE_LABEL.write}</option>
+            <option value="read">{SCOPE_LABEL.read}</option>
+          </select>
           <button
             type="submit"
             disabled={creating || !newName.trim()}
@@ -98,6 +134,7 @@ export default function ApiKeys() {
             {creating ? 'Generating…' : 'Generate'}
           </button>
         </form>
+        <p className="mt-2 text-xs text-gray-400">{READ_ONLY_HINT}</p>
       </div>
 
       {/* Keys table */}
@@ -114,6 +151,7 @@ export default function ApiKeys() {
                   <th className="px-5 py-3">Name</th>
                   <th className="px-5 py-3">Prefix</th>
                   <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3" title={READ_ONLY_HINT}>Scope</th>
                   <th className="px-5 py-3">Requests</th>
                   <th className="px-5 py-3">Last Used</th>
                   <th className="px-5 py-3">Created</th>
@@ -133,6 +171,25 @@ export default function ApiKeys() {
                       >
                         {k.is_active ? 'Active' : 'Revoked'}
                       </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      {k.is_active ? (
+                        <select
+                          aria-label={`Scope of ${k.name}`}
+                          title={`Change scope. ${READ_ONLY_HINT}`}
+                          value={k.scope ?? 'write'}
+                          disabled={updating === k.id}
+                          onChange={e => changeScope(k.id, e.target.value as ApiKeyScope)}
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium border cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 ${SCOPE_BADGE[k.scope ?? 'write']}`}
+                        >
+                          <option value="write">{SCOPE_LABEL.write}</option>
+                          <option value="read">{SCOPE_LABEL.read}</option>
+                        </select>
+                      ) : (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border opacity-60 ${SCOPE_BADGE[k.scope ?? 'write']}`}>
+                          {SCOPE_LABEL[k.scope ?? 'write']}
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-3 text-gray-500">{k.request_count.toLocaleString()}</td>
                     <td className="px-5 py-3 text-gray-500">

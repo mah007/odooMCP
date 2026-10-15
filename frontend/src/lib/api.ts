@@ -51,11 +51,13 @@ export const api = {
 
   apiKeys: {
     list: () => request<ApiKeyRow[]>('/api-keys'),
-    create: (name: string) =>
+    create: (name: string, scope: ApiKeyScope = 'write') =>
       request<ApiKeyRow & { key: string }>('/api-keys', {
         method: 'POST',
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, scope }),
       }),
+    update: (id: number, data: { name?: string; scope?: ApiKeyScope }) =>
+      request<ApiKeyRow>(`/api-keys/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     revoke: (id: number) => request<void>(`/api-keys/${id}`, { method: 'DELETE' }),
   },
 
@@ -77,6 +79,16 @@ export const api = {
 }
 
 // Types
+export type ApiMode = 'auto' | 'xmlrpc' | 'json2'
+export type TransportMode = 'json2' | 'xmlrpc'
+export type ApiKeyScope = 'read' | 'write'
+
+export interface ConnectionTestStep {
+  step: string
+  ok: boolean
+  detail: string
+}
+
 export interface Connection {
   id: number
   name: string
@@ -89,6 +101,14 @@ export interface Connection {
   last_tested_at: string | null
   last_error: string | null
   created_at: string | null
+  api_mode: ApiMode
+  verify_ssl: boolean
+  timeout: number
+  default_context: Record<string, unknown>
+  detected_version: string | null
+  detected_mode: TransportMode | null
+  last_test_steps: ConnectionTestStep[]
+  updated_at: string | null
 }
 
 export interface ConnectionCreate {
@@ -98,6 +118,11 @@ export interface ConnectionCreate {
   username: string
   credential: string
   credential_type: 'api_key' | 'password'
+  api_mode: ApiMode
+  verify_ssl: boolean
+  timeout: number
+  /** Create: null or an object. Update: {} clears it, omit to keep. */
+  default_context: Record<string, unknown> | null
 }
 
 export interface ApiKeyRow {
@@ -108,6 +133,7 @@ export interface ApiKeyRow {
   created_at: string | null
   last_used_at: string | null
   request_count: number
+  scope: ApiKeyScope
 }
 
 export interface AdminRow {
@@ -122,7 +148,13 @@ export interface DashboardData {
   total_errors: number
   active_connections: number
   active_keys: number
-  tool_stats: { tool: string; count: number }[]
+  tool_stats: {
+    tool: string
+    count: number
+    avg_bytes: number | null
+    max_bytes: number | null
+    avg_ms: number | null
+  }[]
   recent_logs: {
     id: number
     timestamp: string | null
@@ -130,5 +162,7 @@ export interface DashboardData {
     status: 'success' | 'error'
     duration_ms: number
     error_message: string | null
+    response_bytes: number | null
+    transport: TransportMode | null
   }[]
 }

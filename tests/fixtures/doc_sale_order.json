@@ -1,0 +1,244 @@
+{
+ "model": "sale.order",
+ "name": "Sales Order",
+ "doc": "Represents a customer quotation that can be converted into a sales order. Used",
+ "fields": {},
+ "methods": {
+  "action_cancel": {
+   "signature": "()",
+   "parameters": {},
+   "doc": "<div class=\"document\">\n\n\n<p>Cancel sales order and related draft invoices.</p>\n</div>",
+   "model": "sale.order",
+   "module": "sale"
+  },
+  "action_confirm": {
+   "signature": "() -> bool",
+   "parameters": {},
+   "doc": "<div class=\"document\">\n\n\n<p>Confirm the given quotation(s) and set their confirmation dates.</p>\n<p>If the corresponding setting is enabled, also locks the Sale Order.</p>\n</div>",
+   "model": "sale.order",
+   "module": "sale"
+  },
+  "action_quotation_send": {
+   "signature": "()",
+   "parameters": {},
+   "doc": "<div class=\"document\">\n\n\n<p>Open a wizard to compose an email, with relevant mail template loaded by default.</p>\n</div>",
+   "model": "sale.order",
+   "module": "sale"
+  },
+  "copy": {
+   "signature": "(default=None) -> list[int]",
+   "parameters": {
+    "default": {
+     "default": null,
+     "annotation": "ValuesType | None"
+    }
+   },
+   "doc": "<div class=\"document\">\n\n\n<p>Duplicate record <tt class=\"docutils literal\">self</tt> updating it with default values.</p>\n</div>",
+   "model": "core",
+   "module": "core"
+  },
+  "message_post": {
+   "signature": "(body='', subject=None, message_type='notification', email_from=None, author_id=None, parent_id=False, subtype_xmlid=None, subtype_id=False, partner_ids=None, partner_cc_ids=None, outgoing_email_to=False, incoming_email_to=False, incoming_email_cc=False, attachments=None, attachment_ids=None, body_is_html=False, tracking_values=None, kwargs)",
+   "parameters": {
+    "body": {
+     "kind": "KEYWORD_ONLY",
+     "default": "",
+     "annotation": "str|Markup"
+    },
+    "subject": {
+     "kind": "KEYWORD_ONLY",
+     "default": null,
+     "annotation": "str"
+    },
+    "message_type": {
+     "kind": "KEYWORD_ONLY",
+     "default": "notification",
+     "annotation": "str"
+    },
+    "email_from": {
+     "kind": "KEYWORD_ONLY",
+     "default": null,
+     "annotation": "str"
+    },
+    "author_id": {
+     "kind": "KEYWORD_ONLY",
+     "default": null,
+     "annotation": "int"
+    },
+    "parent_id": {
+     "kind": "KEYWORD_ONLY",
+     "default": false,
+     "annotation": "int"
+    },
+    "subtype_xmlid": {
+     "kind": "KEYWORD_ONLY",
+     "default": null,
+     "annotation": "str"
+    },
+    "subtype_id": {
+     "kind": "KEYWORD_ONLY",
+     "default": false,
+     "annotation": "int"
+    },
+    "partner_ids": {
+     "kind": "KEYWORD_ONLY",
+     "default": null,
+     "annotation": "list(int)"
+    },
+    "partner_cc_ids": {
+     "kind": "KEYWORD_ONLY",
+     "default": null,
+     "annotation": "list(int)"
+    },
+    "outgoing_email_to": {
+     "kind": "KEYWORD_ONLY",
+     "default": false,
+     "annotation": "str"
+    },
+    "incoming_email_to": {
+     "kind": "KEYWORD_ONLY",
+     "default": false,
+     "annotation": "str"
+    },
+    "incoming_email_cc": {
+     "kind": "KEYWORD_ONLY",
+     "default": false,
+     "annotation": "str"
+    },
+    "attachments": {
+     "kind": "KEYWORD_ONLY",
+     "default": null,
+     "annotation": "list(tuple(str, bytes), tuple(str, bytes, dict))"
+    },
+    "attachment_ids": {
+     "kind": "KEYWORD_ONLY",
+     "default": null,
+     "annotation": "list"
+    },
+    "body_is_html": {
+     "kind": "KEYWORD_ONLY",
+     "default": false,
+     "annotation": "bool"
+    },
+    "tracking_values": {
+     "kind": "KEYWORD_ONLY",
+     "default": null
+    },
+    "kwargs": {
+     "kind": "VAR_KEYWORD"
+    }
+   },
+   "doc": "<div class=\"document\">\n\n\n<p>Post a new message in an existing thread, returning the new mail.message.</p>\n<dl class=\"docutils\">\n<dt>Extra keyword arguments will be used either</dt>\n<dd><ul class=\"first last simple\">\n<li>as default column values for the new mail.message record if they match\nmail.message fields;</li>\n<li>propagated to notification methods if not;</li>\n</ul>\n</dd>\n</dl>\n</div>",
+   "model": "mail.thread",
+   "module": "mail"
+  },
+  "name_search": {
+   "signature": "(name='', domain=None, operator='ilike', limit=100) -> list[tuple[int, str]]",
+   "parameters": {
+    "name": {
+     "default": "",
+     "annotation": "str"
+    },
+    "domain": {
+     "default": null,
+     "annotation": "DomainType | None"
+    },
+    "operator": {
+     "default": "ilike",
+     "annotation": "str"
+    },
+    "limit": {
+     "default": 100,
+     "annotation": "int"
+    }
+   },
+   "api": [
+    "model",
+    "readonly"
+   ],
+   "doc": "<div class=\"document\">\n\n\n<p>Search for records that have a display name matching the given\n<tt class=\"docutils literal\">name</tt> pattern when compared with the given <tt class=\"docutils literal\">operator</tt>, while also\nmatching the optional search domain (<tt class=\"docutils literal\">domain</tt>).</p>\n<p>This is used for example to provide suggestions based on a partial\nvalue for a relational field. Should usually behave as the reverse of\n<tt class=\"docutils literal\">display_name</tt>, but that is not guaranteed.</p>\n<p>This method is equivalent to calling <tt class=\"docutils literal\">~.search</tt> with a search\ndomain based on <tt class=\"docutils literal\">display_name</tt> and mapping id and display_name on\nthe resulting search.</p>\n</div>",
+   "model": "core",
+   "module": "core"
+  },
+  "search_read": {
+   "signature": "(domain=None, fields=None, offset=0, limit=None, order=None, read_kwargs) -> list[ValuesType]",
+   "parameters": {
+    "domain": {
+     "default": null,
+     "annotation": "DomainType | None"
+    },
+    "fields": {
+     "default": null,
+     "annotation": "Sequence[str] | None"
+    },
+    "offset": {
+     "default": 0,
+     "annotation": "int"
+    },
+    "limit": {
+     "default": null,
+     "annotation": "int | None"
+    },
+    "order": {
+     "default": null,
+     "annotation": "str | None"
+    },
+    "read_kwargs": {
+     "kind": "VAR_KEYWORD"
+    }
+   },
+   "api": [
+    "model",
+    "readonly"
+   ],
+   "doc": "<div class=\"document\">\n\n\n<p>Perform a <tt class=\"docutils literal\">search_fetch</tt> followed by a <tt class=\"docutils literal\">_read_format</tt>.</p>\n</div>",
+   "model": "core",
+   "module": "core"
+  },
+  "web_search_read": {
+   "signature": "(domain, specification, offset=0, limit=None, order=None, count_limit=None) -> dict[str, int | list[dict]]",
+   "parameters": {
+    "domain": {
+     "annotation": "DomainType"
+    },
+    "specification": {
+     "annotation": "dict[str, dict]"
+    },
+    "offset": {
+     "default": 0,
+     "annotation": "int"
+    },
+    "limit": {
+     "default": null,
+     "annotation": "int | None"
+    },
+    "order": {
+     "default": null,
+     "annotation": "str | None"
+    },
+    "count_limit": {
+     "default": null,
+     "annotation": "int | None"
+    }
+   },
+   "api": [
+    "model",
+    "readonly"
+   ],
+   "doc": "<div class=\"document\">\n\n\n<p>Perform a search followed by a structured read.\nUnlike the standard <tt class=\"docutils literal\">search_read()</tt>, <tt class=\"docutils literal\">web_search_read()</tt> can traverse\nrelational fields to fetch nested field values in a single call.</p>\n</div>",
+   "model": "base",
+   "module": "web"
+  },
+  "write": {
+   "signature": "(vals) -> typing.Literal[True]",
+   "parameters": {
+    "vals": {
+     "annotation": "ValuesType"
+    }
+   },
+   "doc": "<div class=\"document\">\n\n\n<p>Update all records in <tt class=\"docutils literal\">self</tt> with the provided values.</p>\n<ul>\n<li><p class=\"first\">For numeric fields (<tt class=\"docutils literal\">~odoo.fields.Integer</tt>,\n<tt class=\"docutils literal\">~odoo.fields.Float</tt>) the value should be of the\ncorresponding type</p>\n</li>\n<li><p class=\"first\">For <tt class=\"docutils literal\">~odoo.fields.Boolean</tt>, the value should be a\n<tt class=\"docutils literal\">python:bool</tt></p>\n</li>\n<li><p class=\"first\">For <tt class=\"docutils literal\">~odoo.fields.Selection</tt>, the value should match the\nselection values (generally <tt class=\"docutils literal\">python:str</tt>, sometimes\n<tt class=\"docutils literal\">python:int</tt>)</p>\n</li>\n<li><p class=\"first\">For <tt class=\"docutils literal\">~odoo.fields.Many2one</tt>, the value should be the\ndatabase identifier of the record to set</p>\n</li>\n<li><p class=\"first\">The expected value of a <tt class=\"docutils literal\">~odoo.fields.One2many</tt> or\n<tt class=\"docutils literal\">~odoo.fields.Many2many</tt> relational field is a list of\n<tt class=\"docutils literal\">~odoo.fields.Command</tt> that manipulate the relation the\nimplement. There are a total of 7 commands:\n<tt class=\"docutils literal\">~odoo.fields.Command.create</tt>,\n<tt class=\"docutils literal\">~odoo.fields.Command.update</tt>,\n<tt class=\"docutils literal\">~odoo.fields.Command.delete</tt>,\n<tt class=\"docutils literal\">~odoo.fields.Command.unlink</tt>,\n<tt class=\"docutils literal\">~odoo.fields.Command.link</tt>,\n<tt class=\"docutils literal\">~odoo.fields.Command.clear</tt>, and\n<tt class=\"docutils literal\">~odoo.fields.Command.set</tt>.</p>\n</li>\n<li><p class=\"first\">For <tt class=\"docutils literal\">~odoo.fields.Date</tt> and <cite>~odoo.fields.Datetime</cite>,\nthe value should be either a date(time), or a string.</p>\n<div class=\"admonition warning\">\n<p class=\"first admonition-title\">Warning</p>\n<p class=\"last\">If a string is provided for Date(time) fields,\nit must be UTC-only and formatted according to\n<tt class=\"docutils literal\">odoo.tools.misc.DEFAULT_SERVER_DATE_FORMAT</tt> and\n<tt class=\"docutils literal\">odoo.tools.misc.DEFAULT_SERVER_DATETIME_FORMAT</tt></p>\n</div>\n</li>\n<li><p class=\"first\">Other non-relational fields use a string for value</p>\n</li>\n</ul>\n</div>",
+   "model": "core",
+   "module": "core"
+  }
+ }
+}

@@ -1,7 +1,7 @@
 [project]
 name = "odoo-mcp-server"
-version = "2.0.0"
-description = "Odoo MCP Server with Admin Controller UI"
+version = "3.0.0"
+description = "MCP server for Odoo 10-20 (XML-RPC and JSON-2) with an admin UI"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "Mahmoud Abdel Latif", email = "imod007@gmail.com"}]
@@ -9,7 +9,6 @@ license = {text = "MIT"}
 keywords = ["mcp", "odoo", "erp", "ai", "integration"]
 
 dependencies = [
-    "mcp==1.0.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "sqlalchemy>=2.0.0",
@@ -20,12 +19,15 @@ dependencies = [
     "pyjwt>=2.8.0",
     "cryptography>=42.0.0",
     "aiofiles>=23.0.0",
+    "httpx>=0.27.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "ruff>=0.6.0",
     "mypy>=1.0.0",
+    "pytest>=8.0.0",
+    "respx>=0.21.0",
 ]
 
 [build-system]
@@ -34,6 +36,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py311"

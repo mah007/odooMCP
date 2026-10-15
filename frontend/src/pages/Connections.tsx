@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { api, type Connection, type ConnectionCreate } from '../lib/api'
+import { api, type ApiMode, type Connection, type ConnectionCreate, type TransportMode } from '../lib/api'
 
 // ── Status dot ──────────────────────────────────────────────────────────────
 
@@ -90,9 +90,9 @@ function IconPlug({ className = 'w-5 h-5 text-blue-500' } = {}) {
   )
 }
 
-function IconClock() {
+function IconClock({ className = 'w-3 h-3 shrink-0 text-gray-300' } = {}) {
   return (
-    <svg className="w-3 h-3 shrink-0 text-gray-300" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" />
     </svg>
   )
@@ -109,11 +109,80 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(diff / 86400)}d ago`
 }
 
+const MODE_LABEL: Record<TransportMode, string> = { json2: 'JSON-2', xmlrpc: 'XML-RPC' }
+
+/** "20.0+e-20260926" → "20.0", "saas~18.4+e" → "saas~18.4" */
+function shortVersion(raw: string | null): string | null {
+  if (!raw) return null
+  return raw.split('+')[0] || raw
+}
+
+/** Major version number of a raw Odoo version string, or null. */
+function majorVersion(raw: string | null): number | null {
+  const m = raw ? /(\d+)/.exec(raw) : null
+  return m ? parseInt(m[1], 10) : null
+}
+
+function capitalize(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s
+}
+
 // ── Connection Form Modal ─────────────────────────────────────────────────────
 
-type FormState = Omit<ConnectionCreate, never>
+type CredentialType = ConnectionCreate['credential_type']
 
-const EMPTY_FORM: FormState = { name: '', url: '', database: '', username: '', credential: '', credential_type: 'api_key' }
+interface FormState {
+  name: string
+  url: string
+  database: string
+  username: string
+  credential: string
+  credential_type: CredentialType
+  api_mode: ApiMode
+  verify_ssl: boolean
+  /** Kept as text while typing; validated on submit. */
+  timeout: string
+  /** Raw JSON text; validated on submit. */
+  default_context: string
+}
+
+const EMPTY_FORM: FormState = {
+  name: '',
+  url: '',
+  database: '',
+  username: '',
+  credential: '',
+  credential_type: 'api_key',
+  api_mode: 'auto',
+  verify_ssl: true,
+  timeout: '120',
+  default_context: '',
+}
+
+function formFromConnection(c: Connection): FormState {
+  const ctx = c.default_context ?? {}
+  return {
+    name: c.name,
+    url: c.url,
+    database: c.database,
+    username: c.username,
+    credential: '',
+    credential_type: c.credential_type,
+    api_mode: c.api_mode ?? 'auto',
+    verify_ssl: c.verify_ssl ?? true,
+    timeout: String(c.timeout ?? 120),
+    default_context: Object.keys(ctx).length > 0 ? JSON.stringify(ctx, null, 2) : '',
+  }
+}
+
+const API_MODE_HINT: Record<ApiMode, string> = {
+  auto: 'Auto uses JSON-2 on Odoo 19+ and XML-RPC on 18 and older.',
+  xmlrpc: 'Always XML-RPC. Works on every version, but it is deprecated on Odoo 19+.',
+  json2: 'Always JSON-2. Needs Odoo 19+ and an API key with RPC scope (passwords are rejected).',
+}
+
+const TIMEOUT_MIN = 5
+const TIMEOUT_MAX = 900
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -134,37 +203,118 @@ function InputWithIcon({
   required,
   onChange,
   suffix,
+  min,
+  max,
+  error,
 }: {
   icon: React.ReactNode
   label: string
-  hint?: string
+  hint?: React.ReactNode
   type?: string
   placeholder?: string
   value: string
   required?: boolean
   onChange: (v: string) => void
   suffix?: React.ReactNode
+  min?: number
+  max?: number
+  error?: string
 }) {
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
-      <div className="flex items-center gap-0 border border-gray-200 rounded-xl bg-gray-50 focus-within:bg-white focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+      <div className={`flex items-center gap-0 border rounded-xl bg-gray-50 focus-within:bg-white focus-within:ring-2 transition-all ${
+        error
+          ? 'border-red-300 focus-within:border-red-400 focus-within:ring-red-100'
+          : 'border-gray-200 focus-within:border-blue-400 focus-within:ring-blue-100'
+      }`}>
         <span className="pl-3 pr-2 flex items-center">{icon}</span>
         <input
           type={type}
           required={required}
           placeholder={placeholder}
           value={value}
+          min={min}
+          max={max}
           onChange={e => onChange(e.target.value)}
           className="flex-1 bg-transparent py-2.5 pr-3 text-sm text-gray-800 placeholder:text-gray-300 outline-none min-w-0"
         />
         {suffix && <span className="pr-2">{suffix}</span>}
       </div>
-      {hint && <p className="mt-1 text-[11px] text-gray-400">{hint}</p>}
+      {error && <p className="mt-1 text-[11px] text-red-600">{error}</p>}
+      {hint && !error && <p className="mt-1 text-[11px] text-gray-400">{hint}</p>}
     </div>
   )
 }
 
+function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T
+  options: { value: T; label: string; sub?: string }[]
+  onChange: (v: T) => void
+}) {
+  return (
+    <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+      {options.map(o => {
+        const selected = o.value === value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(o.value)}
+            className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              selected ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {o.label}
+            {o.sub && (
+              <span className={`block text-[10px] font-normal ${selected ? 'text-blue-400' : 'text-gray-400'}`}>
+                {o.sub}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function Toggle({
+  label,
+  checked,
+  onChange,
+  onText,
+  offText,
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+  onText: string
+  offText: string
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className="w-full flex items-center gap-2.5 border border-gray-200 rounded-xl bg-gray-50 px-3 py-2.5 hover:bg-white focus:outline-none focus-visible:border-blue-400 focus-visible:ring-2 focus-visible:ring-blue-100 transition-all"
+      >
+        <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? 'bg-blue-600' : 'bg-gray-300'}`}>
+          <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : ''}`} />
+        </span>
+        <span className={`text-sm ${checked ? 'text-gray-800' : 'text-amber-600'}`}>{checked ? onText : offText}</span>
+      </button>
+    </div>
+  )
+}
 
 function ConnectionFormModal({
   editConn,
@@ -175,31 +325,68 @@ function ConnectionFormModal({
   onClose: () => void
   onSaved: () => void
 }) {
-  const [form, setForm] = useState<FormState>(
-    editConn
-      ? { name: editConn.name, url: editConn.url, database: editConn.database, username: editConn.username, credential: '', credential_type: editConn.credential_type }
-      : EMPTY_FORM
-  )
+  const [form, setForm] = useState<FormState>(editConn ? formFromConnection(editConn) : EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [showSecret, setShowSecret] = useState(false)
   const [error, setError] = useState('')
+  const [contextError, setContextError] = useState('')
+  const [timeoutError, setTimeoutError] = useState('')
   const firstRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { firstRef.current?.focus() }, [])
 
-  const set = (k: keyof FormState) => (v: string) => setForm(f => ({ ...f, [k]: v }))
+  const setField = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm(f => ({ ...f, [k]: v }))
+  const set = (k: 'name' | 'url' | 'database' | 'username' | 'credential') => (v: string) => setField(k, v)
+
+  /** Empty → null; a JSON object → that object; anything else → error string. */
+  function parseContext(raw: string): { value: Record<string, unknown> | null; error?: string } {
+    const text = raw.trim()
+    if (!text) return { value: null }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(text)
+    } catch (err) {
+      return { value: null, error: `Invalid JSON: ${err instanceof Error ? err.message : 'parse error'}` }
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { value: null, error: 'Default context must be a JSON object, e.g. {"lang": "en_US"}.' }
+    }
+    return { value: parsed as Record<string, unknown> }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    setSaving(true)
     setError('')
+
+    const ctx = parseContext(form.default_context)
+    setContextError(ctx.error ?? '')
+    const timeout = Number(form.timeout)
+    const timeoutOk = form.timeout.trim() !== '' && Number.isInteger(timeout) && timeout >= TIMEOUT_MIN && timeout <= TIMEOUT_MAX
+    setTimeoutError(timeoutOk ? '' : `Enter a whole number of seconds between ${TIMEOUT_MIN} and ${TIMEOUT_MAX}.`)
+    if (ctx.error || !timeoutOk) return
+
+    const payload: ConnectionCreate = {
+      name: form.name,
+      url: form.url,
+      database: form.database,
+      username: form.username,
+      credential: form.credential,
+      credential_type: form.credential_type,
+      api_mode: form.api_mode,
+      verify_ssl: form.verify_ssl,
+      timeout,
+      default_context: ctx.value,
+    }
+
+    setSaving(true)
     try {
       if (editConn) {
-        const update: Partial<ConnectionCreate> = { ...form }
+        // {} clears the stored context; omitting the credential keeps the current one
+        const update: Partial<ConnectionCreate> = { ...payload, default_context: ctx.value ?? {} }
         if (!update.credential) delete update.credential
         await api.connections.update(editConn.id, update)
       } else {
-        await api.connections.create(form)
+        await api.connections.create(payload)
       }
       onSaved()
       onClose()
@@ -212,7 +399,7 @@ function ConnectionFormModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
 
         {/* Modal header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5">
@@ -294,10 +481,32 @@ function ConnectionFormModal({
               onChange={set('username')}
             />
 
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Credential type</label>
+              <Segmented<CredentialType>
+                value={form.credential_type}
+                onChange={v => setField('credential_type', v)}
+                options={[
+                  { value: 'api_key', label: 'API key' },
+                  { value: 'password', label: 'Password' },
+                ]}
+              />
+            </div>
+
             <InputWithIcon
               icon={<IconKey className="w-4 h-4 text-gray-400" />}
-              label={`Credential${editConn ? ' — leave blank to keep current' : ''}`}
-              placeholder="API key or password"
+              label={`${form.credential_type === 'api_key' ? 'API Key' : 'Password'}${editConn ? ' — leave blank to keep current' : ''}`}
+              placeholder={form.credential_type === 'api_key' ? 'Odoo API key' : 'Odoo password'}
+              hint={
+                <>
+                  Odoo 19+ needs an API key with RPC scope: Odoo → avatar → Preferences → Account Security → New API Key.
+                  {form.credential_type === 'password' && (
+                    <span className="block mt-0.5 text-amber-600">
+                      A password only works over XML-RPC, which is deprecated on Odoo 19+.
+                    </span>
+                  )}
+                </>
+              }
               type={showSecret ? 'text' : 'password'}
               value={form.credential}
               required={!editConn}
@@ -313,6 +522,75 @@ function ConnectionFormModal({
                 </button>
               }
             />
+          </div>
+
+          {/* Transport */}
+          <div className="space-y-3">
+            <SectionLabel>Transport</SectionLabel>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">API mode</label>
+              <Segmented<ApiMode>
+                value={form.api_mode}
+                onChange={v => setField('api_mode', v)}
+                options={[
+                  { value: 'auto', label: 'Auto', sub: 'recommended' },
+                  { value: 'xmlrpc', label: 'XML-RPC', sub: 'Odoo ≤ 18' },
+                  { value: 'json2', label: 'JSON-2', sub: 'Odoo 19+' },
+                ]}
+              />
+              <p className="mt-1 text-[11px] text-gray-400">{API_MODE_HINT[form.api_mode]}</p>
+              {form.api_mode === 'json2' && form.credential_type === 'password' && (
+                <p className="mt-0.5 text-[11px] text-amber-600">JSON-2 does not accept passwords: switch the credential to an API key.</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Toggle
+                label="SSL certificate"
+                checked={form.verify_ssl}
+                onChange={v => setField('verify_ssl', v)}
+                onText="Verify"
+                offText="Don't verify"
+              />
+              <InputWithIcon
+                icon={<IconClock className="w-4 h-4 text-gray-400" />}
+                label="Timeout"
+                type="number"
+                min={TIMEOUT_MIN}
+                max={TIMEOUT_MAX}
+                value={form.timeout}
+                required
+                error={timeoutError}
+                onChange={v => { setField('timeout', v); setTimeoutError('') }}
+                suffix={<span className="text-xs text-gray-400">sec</span>}
+              />
+            </div>
+            <p className="-mt-1 text-[11px] text-gray-400">
+              Turn SSL verification off only for self-signed certificates on a trusted network. Timeout applies to each Odoo call ({TIMEOUT_MIN}–{TIMEOUT_MAX} s).
+            </p>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Default context</label>
+              <textarea
+                rows={Math.min(8, Math.max(3, form.default_context.split('\n').length))}
+                spellCheck={false}
+                placeholder={'{"lang": "en_US"}'}
+                value={form.default_context}
+                onChange={e => { setField('default_context', e.target.value); setContextError('') }}
+                className={`w-full border rounded-xl bg-gray-50 px-3 py-2.5 text-sm font-mono text-gray-800 placeholder:text-gray-300 outline-none focus:bg-white focus:ring-2 transition-all resize-y ${
+                  contextError
+                    ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
+                    : 'border-gray-200 focus:border-blue-400 focus:ring-blue-100'
+                }`}
+              />
+              {contextError ? (
+                <p className="mt-1 text-[11px] text-red-600">{contextError}</p>
+              ) : (
+                <p className="mt-1 text-[11px] text-gray-400">
+                  JSON object added to the context of every Odoo call (e.g. lang, tz, allowed_company_ids). Leave empty for none.
+                </p>
+              )}
+            </div>
           </div>
         </form>
 
@@ -352,6 +630,73 @@ function ConnectionFormModal({
 
 // ── Kanban Card ───────────────────────────────────────────────────────────────
 
+const BADGE = 'inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border'
+
+function TransportBadges({ conn }: { conn: Connection }) {
+  const version = shortVersion(conn.detected_version)
+  const modeClass =
+    conn.detected_mode === 'json2'
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      : conn.detected_mode === 'xmlrpc'
+        ? 'bg-slate-50 text-slate-600 border-slate-200'
+        : 'bg-gray-50 text-gray-500 border-gray-200'
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+      {version ? (
+        <span className={`${BADGE} ${modeClass}`} title={`Odoo ${conn.detected_version}`}>
+          Odoo {version}
+          {conn.detected_mode && <> · {MODE_LABEL[conn.detected_mode]}</>}
+        </span>
+      ) : (
+        <span className="text-[11px] text-gray-400 italic">Version not detected yet — click Test</span>
+      )}
+      {conn.api_mode && conn.api_mode !== 'auto' && (
+        <span className={`${BADGE} bg-violet-50 text-violet-700 border-violet-200`} title="API mode is not auto">
+          forced {MODE_LABEL[conn.api_mode]}
+        </span>
+      )}
+      {conn.verify_ssl === false && (
+        <span className={`${BADGE} bg-amber-50 text-amber-700 border-amber-200`} title="SSL certificate is not verified">
+          SSL not verified
+        </span>
+      )}
+    </div>
+  )
+}
+
+function TestSteps({ conn }: { conn: Connection }) {
+  const steps = conn.last_test_steps ?? []
+  if (steps.length === 0) return null
+  // Editing a connection resets its status to untested; the steps then describe the old settings.
+  const stale = conn.status === 'untested'
+  const failed = steps.some(st => !st.ok)
+  return (
+    <div
+      className={`mt-2 rounded-lg border px-2.5 py-2 ${failed ? 'border-red-100 bg-red-50/50' : 'border-gray-100 bg-gray-50'} ${stale ? 'opacity-60' : ''}`}
+      title={failed ? conn.last_error ?? undefined : undefined}
+    >
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+        Last test
+        {stale && <span className="normal-case tracking-normal font-normal"> · settings changed since</span>}
+      </p>
+      <ul className="space-y-0.5">
+        {steps.map((st, i) => (
+          <li key={i} className="flex items-start gap-1.5 text-[11px] leading-snug">
+            <span className={`shrink-0 w-3 font-bold ${st.ok ? 'text-green-500' : 'text-red-500'}`}>{st.ok ? '✓' : '✗'}</span>
+            <span className="shrink-0 w-[6.75rem] text-gray-500">{capitalize(st.step)}</span>
+            <span
+              className={`min-w-0 flex-1 ${st.ok ? 'text-gray-400 truncate' : 'text-red-600 break-words'}`}
+              title={st.detail}
+            >
+              {st.detail}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function ConnectionCard({
   conn,
   testing,
@@ -370,6 +715,9 @@ function ConnectionCard({
   onDelete: () => void
 }) {
   const isActive = conn.is_active
+  const major = majorVersion(conn.detected_version)
+  const usesDeprecatedXmlrpc = major !== null && major >= 19 && conn.credential_type === 'password'
+  const hasFailedStep = (conn.last_test_steps ?? []).some(st => !st.ok)
   const borderClass = isActive
     ? 'border-blue-400 shadow-blue-100 shadow-md'
     : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
@@ -401,6 +749,7 @@ function ConnectionCard({
             <span className="normal-case tracking-normal font-normal text-gray-300"> · tested {timeAgo(conn.last_tested_at)}</span>
           )}
         </p>
+        <TransportBadges conn={conn} />
       </div>
 
       {/* Divider */}
@@ -425,12 +774,24 @@ function ConnectionCard({
           <span className="text-xs text-gray-400">{conn.credential_type === 'api_key' ? 'API Key' : 'Password'}</span>
         </div>
 
-        {conn.last_error && (
-          <div className="mt-2 flex items-start gap-1.5 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">
+        {usesDeprecatedXmlrpc && (
+          <div className="mt-2 flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+            <span className="text-amber-500 text-xs mt-0.5">⚠</span>
+            <span className="text-xs text-amber-700">
+              Using XML-RPC (deprecated): switch to an API key with RPC scope to use JSON-2.
+            </span>
+          </div>
+        )}
+
+        {/* Summary line; skipped when a failed test step below already shows the error */}
+        {conn.last_error && !hasFailedStep && (
+          <div className="mt-2 flex items-start gap-1.5 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5" title={conn.last_error}>
             <span className="text-red-400 text-xs mt-0.5">⚠</span>
             <span className="text-xs text-red-600 line-clamp-2">{conn.last_error}</span>
           </div>
         )}
+
+        <TestSteps conn={conn} />
       </div>
 
       {/* Footer actions */}
@@ -495,9 +856,12 @@ export default function Connections() {
 
   async function testConn(id: number) {
     setTesting(id)
+    setListError('')
     try {
       const updated = await api.connections.test(id)
       setConns(prev => prev.map(c => (c.id === id ? updated : c)))
+    } catch (e: unknown) {
+      setListError(e instanceof Error ? e.message : 'Test failed')
     } finally {
       setTesting(null)
     }

@@ -26,11 +26,27 @@ def dashboard(db: Session = Depends(get_db), _: str = Depends(require_auth)):
 
     # Per-tool breakdown
     tool_rows = db.execute(
-        select(RequestLog.tool_name, func.count(RequestLog.id).label("count"))
+        select(
+            RequestLog.tool_name,
+            func.count(RequestLog.id).label("count"),
+            func.avg(RequestLog.response_bytes).label("avg_bytes"),
+            func.max(RequestLog.response_bytes).label("max_bytes"),
+            func.avg(RequestLog.duration_ms).label("avg_ms"),
+        )
         .group_by(RequestLog.tool_name)
         .order_by(func.count(RequestLog.id).desc())
     ).all()
-    tool_stats = [{"tool": r.tool_name, "count": r.count} for r in tool_rows]
+    tool_stats = [
+        {
+            "tool": r.tool_name,
+            "count": r.count,
+            # NULL for v2-era rows, which did not record sizes
+            "avg_bytes": int(r.avg_bytes) if r.avg_bytes is not None else None,
+            "max_bytes": r.max_bytes,
+            "avg_ms": int(r.avg_ms) if r.avg_ms is not None else None,
+        }
+        for r in tool_rows
+    ]
 
     # Recent 50 logs (newest first)
     recent = db.execute(
@@ -44,6 +60,8 @@ def dashboard(db: Session = Depends(get_db), _: str = Depends(require_auth)):
             "status": r.status,
             "duration_ms": r.duration_ms,
             "error_message": r.error_message,
+            "response_bytes": r.response_bytes,
+            "transport": r.transport,
         }
         for r in recent
     ]
