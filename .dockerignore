@@ -1,0 +1,15 @@
+# Keep the build context small and the image free of local artefacts
+.git
+.venv
+.env
+data/
+logs/
+tests/
+**/__pycache__
+.ruff_cache
+.mypy_cache
+.pytest_cache
+frontend/node_modules
+frontend/*.tsbuildinfo
+# Built by the frontend stage of the Dockerfile; a local build must not leak in
+src/controller/static
