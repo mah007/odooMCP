@@ -12,7 +12,7 @@
 | **Name** | odoo-mcp-server |
 | **Version** | 3.0.0 |
 | **Author** | Mahmoud Abdel Latif (enhanced from Václav Zeman's original) |
-| **License** | MIT in `pyproject.toml` and the README, but `LICENSE` holds the GNU GPL v3 text: see Open Items |
+| **License** | MIT |
 | **Python** | 3.11+ |
 | **Stack** | FastAPI · Uvicorn · SQLAlchemy/SQLite · httpx · XML-RPC · React/Vite/Tailwind admin UI |
 
@@ -129,12 +129,12 @@ tests/integration/             live, env-gated (see test_live.py docstring)
 | 2026-10-15 | `model_info` hides methods introduced by `core` and `base` unless `include_core_methods` | `base` adds ~40 generic `web_*` / gantt / cohort helpers to every model |
 | 2026-10-15 | XML-RPC `create` sends `vals_list` positionally | Odoo's `call_kw` reads `args[0]` for create and raises IndexError otherwise |
 | 2026-10-15 | Drop the `mcp` package, hand-written protocol layer | Only its types were used; plain dicts keep the schema under our control |
+| 2026-10-15 | License: MIT (LICENSE replaced; it held the GPL v3 text) | Align LICENSE with README and pyproject.toml |
 
 ---
 
 ## Open Items
 
-- [ ] License mismatch: `LICENSE` is GNU GPL v3, while `pyproject.toml`, the README and the badge say MIT. Pick one and align the files.
 - [ ] Upgrade the Alghomlas instance (its Odoo version decides the transport).
 
 ---
